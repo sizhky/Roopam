@@ -20,7 +20,7 @@ final class ConfigManager: ObservableObject {
     /// Base directory for all app data
     var appSupportURL: URL {
         let url = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("SidebarFavorites")
+            .appendingPathComponent("FolderIcons")
         try? fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

@@ -115,8 +115,8 @@ enum MigrationService {
     /// This guard is the only thing standing between the teardown and
     /// force-terminating or deleting something unrelated, so it stays exactly as
     /// strict as the code it replaces. Note the trailing dot: the Manager itself
-    /// (`com.ivg-design.SidebarFavoritesManager`) does not match.
-    private static let legacyBundleIdentifierPrefix = "com.ivg-design.SidebarFavorites."
+    /// (`local.foldericons.SidebarFavoritesManager`) does not match.
+    private static let legacyBundleIdentifierPrefix = "local.foldericons.SidebarFavorites."
 
     /// Where the pre-1.0 build embedded the Finder Sync extension in each app.
     private static let legacyExtensionRelativePath = "Contents/PlugIns/IconAppSync.appex"
@@ -665,7 +665,7 @@ enum MigrationService {
     ///     directory, so no link and no `..` can walk a delete out of the sandbox;
     ///  4. the resolved path is a directory - a plain file, socket or device is
     ///     never an app bundle;
-    ///  5. its `CFBundleIdentifier` starts with `com.ivg-design.SidebarFavorites.`.
+    ///  5. its `CFBundleIdentifier` starts with `local.foldericons.SidebarFavorites.`.
     ///     Never by filename: an app called `Downloads.app` that somebody else put
     ///     there is not ours to delete.
     private static func screen(_ entry: URL, resolvedRoot: URL, fileManager: FileManager) -> Screening {

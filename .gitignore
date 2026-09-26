@@ -39,3 +39,7 @@ _archive/
 # Superseded screenshots, kept locally for reference only.
 # Some show real favorites and paths, so they are deliberately not published.
 docs/assets/archive/
+
+# Local Folder Icons build products
+build-local/
+*.log

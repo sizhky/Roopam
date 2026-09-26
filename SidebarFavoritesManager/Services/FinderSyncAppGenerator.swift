@@ -37,7 +37,7 @@ final class FinderSyncAppGenerator {
 
     // MARK: - Naming
 
-    private static let bundleIDPrefix = "com.ivg-design.SidebarFavorites.adv"
+    private static let bundleIDPrefix = "local.foldericons.SidebarFavorites.adv"
     private static let templateDirectoryName = "FinderSyncTemplate"
 
     /// "SBF-<Name>" - the System Settings display identity.

@@ -273,6 +273,14 @@ propertiesToClear:(nullable NSArray<NSString *> *)propertiesToClear
     }
 
     CFIndex existingIndex = SFLIndexOfURL(snapshot, url);
+    // Implements docs/folder-icons/design.md: edit existing Favorites only.
+    if (existingIndex < 0) {
+        CFRelease(snapshot);
+        CFRelease(list);
+        return SFLFail(error, SFLBridgeErrorCodeItemNotFound,
+                       @"This folder is no longer in Finder Favorites. No row was added.");
+    }
+
     LSSharedFileListItemRef anchor = SFLAnchorForIndex(snapshot, existingIndex);
 
     // Read the row we are about to overwrite BEFORE overwriting it. Same shape as
@@ -459,43 +467,8 @@ static LSSharedFileListItemRef SFLVolumeRowForPath(CFArrayRef snapshot, NSString
 #pragma mark - Removing
 
 + (BOOL)removeItemID:(uint32_t)itemID error:(NSError **)error {
-    LSSharedFileListRef list = SFLCreateFavoritesList();
-    if (list == NULL) {
-        return SFLFail(error, SFLBridgeErrorCodeListUnavailable, @"Finder's Favorites list is unavailable.");
-    }
-
-    UInt32 seed = 0;
-    CFArrayRef snapshot = LSSharedFileListCopySnapshot(list, &seed);
-    if (snapshot == NULL) {
-        CFRelease(list);
-        return SFLFail(error, SFLBridgeErrorCodeSnapshotFailed, @"Couldn't read Finder's Favorites list.");
-    }
-
-    OSStatus status = noErr;
-    BOOL found = NO;
-    CFIndex count = CFArrayGetCount(snapshot);
-    for (CFIndex index = 0; index < count; index++) {
-        LSSharedFileListItemRef item = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(snapshot, index);
-        if (LSSharedFileListItemGetID(item) != itemID) {
-            continue;
-        }
-        found = YES;
-        status = LSSharedFileListItemRemove(list, item);
-        break;
-    }
-
-    CFRelease(snapshot);
-    CFRelease(list);
-
-    if (!found) {
-        // Already gone — macOS auto-prunes rows whose target directory is deleted.
-        return SFLFail(error, SFLBridgeErrorCodeItemNotFound, @"That sidebar row is no longer in Finder's Favorites.");
-    }
-    if (status != noErr) {
-        return SFLFail(error, status,
-                       [NSString stringWithFormat:@"Couldn't remove the sidebar row (error %d).", (int)status]);
-    }
-    return YES;
+    return SFLFail(error, SFLBridgeErrorCodeItemNotFound,
+                   @"Folder Icons never removes Finder Favorites.");
 }
 
 @end

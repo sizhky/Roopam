@@ -352,14 +352,14 @@ struct MigrationConsentSheet: View {
                 .init(
                     url: URL(fileURLWithPath: "/Users/me/Library/Application Support/SidebarFavorites/Apps/Downloads.app"),
                     displayName: "Downloads",
-                    bundleIdentifier: "com.ivg-design.SidebarFavorites.Downloads",
-                    extensionIdentifier: "com.ivg-design.SidebarFavorites.Downloads.IconAppSync"
+                    bundleIdentifier: "local.foldericons.SidebarFavorites.Downloads",
+                    extensionIdentifier: "local.foldericons.SidebarFavorites.Downloads.IconAppSync"
                 ),
                 .init(
                     url: URL(fileURLWithPath: "/Users/me/Library/Application Support/SidebarFavorites/Apps/Projects.app"),
                     displayName: "Projects",
-                    bundleIdentifier: "com.ivg-design.SidebarFavorites.Projects",
-                    extensionIdentifier: "com.ivg-design.SidebarFavorites.Projects.IconAppSync"
+                    bundleIdentifier: "local.foldericons.SidebarFavorites.Projects",
+                    extensionIdentifier: "local.foldericons.SidebarFavorites.Projects.IconAppSync"
                 )
             ],
             entriesLeftInPlace: ["Notes.app (com.example.Notes) wasn't created by Sidebar Favorites, so it was left alone."],

@@ -1000,81 +1000,7 @@ private enum SidebarReconciler {
         let manager = SidebarItemManager.shared
 
         guard let row = match.row else {
-            guard !match.bindingWentStale else {
-                // The binding pointed at a row that has moved on and nothing else
-                // matches. Inserting here is how a moved folder ends up with two
-                // rows: clear the binding and let the next pass start clean.
-                outcome.bindings.append(BindingUpdate(favorite, itemID: nil, provenance: .unbound))
-                return
-            }
-
-            guard folderExists(at: favorite.expandedFolderPath) else {
-                outcome.warnings.append("\(favorite.name): folder no longer exists at \(favorite.folderPath)")
-                if favorite.sidebarItemID != nil || favorite.sidebarProvenance != .unbound {
-                    outcome.bindings.append(BindingUpdate(favorite, itemID: nil, provenance: .unbound))
-                }
-                return
-            }
-
-            do {
-                let result = try manager.upsert(
-                    url: favorite.folderURL,
-                    displayName: favorite.name,
-                    osType: osType
-                )
-                let inserted = result.row
-
-                // BASE CASE of the ownership induction. Finder's Favorites list
-                // de-duplicates by URL, so this call is an insert only when the row
-                // it produced was not in the list a moment ago. If it WAS, either
-                // path matching missed a row the user already had (a spelling the
-                // equivalence check does not cover) or they added one WHILE this
-                // pass was running - and the write landed on theirs, which is
-                // emphatically not a row we may ever rename or delete.
-                //
-                // Asked of the insert's OWN snapshot, taken microseconds before it
-                // anchored, rather than of `rows`: that was read at the top of the
-                // pass and every upsert since is two XPC round-trips to
-                // sharedfilelistd, so a row dragged in mid-pass is missing from it.
-                // `withdraw` re-reads live for the same reason. The stale snapshot
-                // stays as a backstop, so nothing this used to catch is lost.
-                let preexisting = result.preexisting ?? rows.first { $0.itemID == inserted.itemID }
-                store(inserted, in: &rows)
-
-                guard let preexisting else {
-                    let update = BindingUpdate(favorite, itemID: inserted.itemID, provenance: .managed)
-                    // On disk before the next favorite is touched: this is the one
-                    // binding whose loss cannot be recovered from. Without it, a pass
-                    // interrupted after the insert leaves a row the app created that
-                    // the next launch can only adopt - and an adopted row is never
-                    // removed, so it would stay in the sidebar for good, under a name
-                    // the user never chose.
-                    checkpoint(update)
-                    outcome.bindings.append(update)
-                    outcome.boundItems[favorite.id] = inserted.itemID
-                    // Deliberately no Finder restart: a row inserted with the
-                    // override already set draws with its custom icon immediately.
-                    return
-                }
-
-                adoptExisting(
-                    favorite: favorite,
-                    osType: osType,
-                    row: inserted,
-                    restoringDisplayName: preexisting.displayName,
-                    restamp: restamp,
-                    rows: &rows,
-                    outcome: &outcome
-                )
-
-                // The override went onto a row that was already on screen, so unlike
-                // a genuine insert this one does need Finder to redraw.
-                if preexisting.osType != osType {
-                    outcome.needsFinderRestart = true
-                }
-            } catch {
-                outcome.warnings.append("Couldn't add '\(favorite.name)' to Finder's sidebar: \(error.localizedDescription)")
-            }
+            outcome.warnings.append("\(favorite.name) is no longer in Finder Favorites; no row was added.")
             return
         }
 
@@ -1254,14 +1180,8 @@ private enum SidebarReconciler {
         favoriteName: String,
         outcome: inout RowOutcome
     ) -> Bool {
-        guard let path, isVolumeRoot(path) else { return false }
+        return false
 
-        do {
-            return try SidebarItemManager.shared.setVolumeOSType(osType, path: path)
-        } catch {
-            outcome.warnings.append("Couldn't update the Locations icon for '\(favoriteName)': \(error.localizedDescription)")
-            return false
-        }
     }
 
     /// Rewrite a row that already carries the right code, so Finder redraws it.

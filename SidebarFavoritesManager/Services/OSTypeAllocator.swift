@@ -24,9 +24,9 @@ enum OSTypeAllocator {
     static let capacity = 32 * 32 * 32
 
     /// Lowercase because LaunchServices lowercases UTI identifiers on ingest
-    /// (measured: "com.ivg-design.SidebarFavorites.icon.q001" ->
+    /// (measured: "local.foldericons.SidebarFavorites.icon.q001" ->
     /// "...sidebarfavorites.icon.q001").
-    static let ourUTIPrefix = "com.ivg-design.sidebarfavorites.icon."
+    static let ourUTIPrefix = "local.foldericons.sidebarfavorites.icon."
 
     /// Codes known to be claimed by macOS. Trivially satisfied by the
     /// `S`-prefixed shape; kept as a cheap assertion against future shape changes.

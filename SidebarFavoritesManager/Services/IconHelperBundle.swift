@@ -19,9 +19,9 @@ import CryptoKit
 final class IconHelperBundle {
     static let shared = IconHelperBundle()
 
-    static let bundleIdentifier = "com.ivg-design.SidebarFavorites.Icons"
+    static let bundleIdentifier = "local.foldericons.SidebarFavorites.Icons"
     static let executableName = "SidebarFavoritesIcons"
-    static let utiPrefix = "com.ivg-design.SidebarFavorites.icon."
+    static let utiPrefix = "local.foldericons.SidebarFavorites.icon."
 
     /// The helper's entire executable - see the type comment. Exactly 17 bytes.
     private static let executableScript = "#!/bin/sh\nexit 0\n"
