@@ -12,8 +12,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   src = fetchurl {
     url = "https://github.com/sizhky/Roopam/releases/download/v${finalAttrs.version}/Roopam-${finalAttrs.version}.dmg";
-    # Set after the first Roopam release: nix hash convert --hash-algo sha256 "$(cut -d' ' -f1 Roopam-<version>.dmg.sha256)"
-    hash = lib.fakeHash;
+    hash = "sha256-E0N/Y2z2bsB2+R6tRmJ2kaN3CynLWjqENM1C347s9Y4=";
   };
 
   nativeBuildInputs = [ _7zz ];

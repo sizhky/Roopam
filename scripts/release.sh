@@ -1,5 +1,6 @@
 #!/bin/bash
 # Publishes the DMG built by build-release.sh as a GitHub release tagged v<version>.
+# Before tagging, it pins the DMG's hash in nix/default.nix and pushes that commit.
 # Release notes are the CHANGELOG section for that version.
 #
 # Preconditions (checked): gh is authenticated, the work tree is clean, HEAD is on
@@ -33,6 +34,13 @@ NOTES=$(awk -v v="$VERSION" '
 
 [ "${1:-}" != "check" ] || { echo "Release $TAG preconditions pass."; exit 0; }
 [ -f "$DMG" ] || fail "$DMG not found. Run: make dmg"
+
+# Pin the nix hash before tagging, so the tagged commit installs exactly the uploaded DMG.
+bash "$ROOT/scripts/pin-nix-hash.sh" "$DMG.sha256"
+if ! git diff --quiet -- nix/default.nix; then
+    git commit -q -m "Pin nix hash for $VERSION" -- nix/default.nix
+    git push origin "$BRANCH"
+fi
 
 git tag -a "$TAG" -m "Roopam $VERSION"
 git push origin "$TAG"

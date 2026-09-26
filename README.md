@@ -99,7 +99,7 @@ make test    # recovery, selection and refresh checks
 
 1. `make bump PART=patch` (or `minor`, `major`, `X.Y.Z`) sets the version, increments the build number, updates `nix/default.nix`, and adds a CHANGELOG section.
 2. Fill in the CHANGELOG section, commit, and push to `main`.
-3. `make release` checks the preconditions, builds, runs the checks, signs, packages `Roopam-<version>.dmg`, tags `v<version>`, and publishes a GitHub release with the DMG, its SHA-256, and the CHANGELOG section as notes.
+3. `make release` checks the preconditions, builds, runs the checks, signs, packages `Roopam-<version>.dmg`, pins its hash in `nix/default.nix`, tags `v<version>`, and publishes a GitHub release with the DMG, its SHA-256, and the CHANGELOG section as notes.
 
 `scripts/build-release.sh` signs with a **Developer ID Application** identity when one is in the keychain and notarizes when a notary keychain profile exists; otherwise it signs ad-hoc. `SIGN_IDENTITY`, `NOTARY_PROFILE` and `NOTARIZE=0` override this.
 
@@ -109,7 +109,7 @@ make test    # recovery, selection and refresh checks
 nix run github:sizhky/Roopam
 ```
 
-This installs the released DMG. After each release, set `hash` in `nix/default.nix` from the published `.sha256` file.
+This installs the released DMG. `make release` pins the DMG's hash in `nix/default.nix` before tagging, so each tag installs exactly the file it published.
 
 ## Roadmap
 
