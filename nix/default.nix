@@ -8,7 +8,7 @@
 
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "roopam";
-  version = "1.2.2";
+  version = "1.3.0";
 
   src = fetchurl {
     url = "https://github.com/sizhky/Roopam/releases/download/v${finalAttrs.version}/Roopam-${finalAttrs.version}.dmg";
