@@ -43,8 +43,14 @@ The raw imported image and a `FolderArtPlacement` (zoom 100–400%, offset as a 
 
 ## Data folder
 
-App data lives in `~/Library/Application Support/Roopam`; the bundle identifier is `local.roopam.Roopam`. Builds before the Roopam rename used `FolderIcons` and `local.foldericons.SidebarFavoritesManager`. The app keeps no UserDefaults, so the identifier change loses no settings.
+App data lives in `~/Library/Application Support/Roopam`; the bundle identifier is `local.roopam.Roopam`. Builds before the Roopam rename used `FolderIcons` and `local.foldericons.SidebarFavoritesManager`. The app kept no UserDefaults at the rename, so the identifier change lost no settings.
 
 On launch, before `config.json` loads, `ConfigManager.migrateLegacyDataFolder` moves `FolderIcons` to `Roopam` when only `FolderIcons` exists and is a real directory. Launch Services knows the sidebar icon helper (`SidebarFavoritesIcons.app`) and each both-icons host (`AdvancedApps/*.app`) by path. The migration unregisters each at the old path, moves the folder, and registers each at the new path with the same `lsregister -f -R -trusted` flags the builders use. If the move fails, it re-registers the old paths and the app keeps using `FolderIcons` for that launch.
 
 The helper bundle identifier, UTI prefix (`local.foldericons.SidebarFavorites.icon.`), Finder Sync extension identifiers, and `SBF-` display names are unchanged. Users never see the identifiers, and changing them would require re-registering every sidebar icon and re-enabling every extension. Strings in `MigrationService` describe upstream SidebarFavorites 0.6 artifacts and stay as they are.
+
+## Editor layout
+
+The window is a `NavigationSplitView`. The sidebar is a native `.sidebar` list, so its material, row height and selection match Finder's. It has two sections. **Folders** has a Choose a Folder row and up to six recently edited folders (stored in the `recentFolders` user default, newest first, missing folders hidden). **Favorites** lists Finder's Favorites with their live glyphs. Selecting a row selects the location; the separate location picker is gone. Dropping a folder on the sidebar or the empty stage selects it. Refresh is an icon-only toolbar button. The window title is hidden because the detail header already names the selection.
+
+The detail pane stays native except for the preview stage (`EaselStage`): a warm painted canvas showing "now → after apply". Folder artwork is chosen with image / color / symbol pill tabs, named color swatches, a surprise-me button, and symbol stickers. Sidebar glyphs use symbol / svg tabs and the same stickers; their preview draws the selected Favorite between its neighbours at Finder's sidebar size. Headings and controls with personality use the system rounded font at black or heavy weight; errors and warnings stay plain text. A successful Apply bounces the preview and splashes paint; Reduce Motion turns both off.

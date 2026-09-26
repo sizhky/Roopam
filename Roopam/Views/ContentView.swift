@@ -24,13 +24,22 @@ struct ContentView: View {
     @State private var iconScale = 1.0
     @State private var symbolBrowser = false
     @State private var busy = false
-    @State private var message = "Choose a location, then select a folder."
+    @State private var message = "Pick a folder or a Favorite in the sidebar."
     @State private var errorMessage: String?
     @State private var importWarnings: [String] = []
     @State private var confirmRestore = false
     @State private var confirmRestart = false
     @State private var revision = 0
     @State private var helperMessage: String?
+    @State private var folderTab = "symbol"
+    @State private var splashCount = 0
+    @State private var bounce = false
+    /// Folders edited here, newest first, one path per line.
+    @AppStorage("recentFolders") private var recentFolders = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let folderHint = "The new icon shows wherever this folder appears. Its sidebar glyph does not change."
+    private static let favoriteHint = "Only this Favorite’s glyph in Finder’s sidebar changes."
 
     private var row: SidebarItem? { rows.first { $0.itemID == selectedRow } }
     private var target: URL? {
@@ -54,19 +63,26 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-            HStack(spacing: 0) {
-                selectionPane.frame(width: 265)
-                Divider()
+        NavigationSplitView {
+            sidebar.navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
+        } detail: {
+            VStack(spacing: 0) {
                 editor.frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                footer
             }
-            Divider()
-            footer
         }
-        .frame(minWidth: 860, minHeight: 660)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .toolbar(removing: .title)
+        .toolbar {
+            ToolbarItem {
+                Button { Task { await refreshFavorites() } } label: {
+                    Label("Refresh Favorites", systemImage: "arrow.clockwise")
+                }
+                .help("Reload Finder’s Favorites")
+                .disabled(busy)
+            }
+        }
+        .frame(minWidth: 860, minHeight: 620)
         .task {
             await refreshFavorites()
             if let diagnostic = configManager.loadDiagnostic { errorMessage = diagnostic }
@@ -84,211 +100,308 @@ struct ContentView: View {
         .alert("Could not complete the change", isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
         )) { Button("OK", role: .cancel) {} } message: { Text(errorMessage ?? "") }
-        .confirmationDialog("Restore the original icon for this location?", isPresented: $confirmRestore) {
+        .confirmationDialog("Restore the original icon?", isPresented: $confirmRestore) {
             Button("Restore Original") { run { try await restore(original: true) } }
-        } message: { Text("The other location keeps its icon. You can undo this change.") }
+        } message: {
+            Text(location == 0 ? "The folder’s sidebar glyph stays as it is. You can undo this change."
+                               : "The folder’s own icon stays as it is. You can undo this change.")
+        }
         .confirmationDialog("Restart Finder to display the updated icons?", isPresented: $confirmRestart) {
             Button("Restart Finder") { run { await coordinator.restartFinderAndWait() } }
         } message: { Text("Finder windows may close and reopen. Finish any Finder operations first.") }
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 24) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Roopam").font(.title2.weight(.semibold))
-                Text("Customize each Finder location independently.").foregroundStyle(.secondary)
-            }
-            Spacer()
-            Picker("Edit location", selection: $location) {
-                Text("Finder main area").tag(0)
-                Text("Finder Favorites sidebar").tag(1)
-            }
-            .pickerStyle(.radioGroup)
-            .fixedSize()
-            .disabled(busy)
-        }.padding(24)
+    // MARK: Sidebar
+
+    /// Sidebar row identity: a folder edited in Finder windows, or a Finder Favorite.
+    private enum Pick: Hashable {
+        case folder(String)
+        case favorite(UInt32)
     }
 
-    private var selectionPane: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(location == 0 ? "FOLDER" : "EXISTING FAVORITES")
-                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            if location == 0 {
-                Button(action: chooseFolder) { Label("Choose Folder…", systemImage: "folder.badge.plus") }
-                    .controlSize(.large)
-                VStack(spacing: 14) {
-                    Image(systemName: "folder").font(.system(size: 34)).foregroundStyle(.secondary)
-                    Text(folder?.lastPathComponent ?? "Drop a folder here")
-                        .font(.headline).lineLimit(2)
-                    Text(folder?.path ?? "Or choose any accessible folder on your Mac.")
-                        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+    private var pick: Binding<Pick?> {
+        Binding(
+            get: { location == 0 ? folder.map { .folder($0.path) } : selectedRow.map { .favorite($0) } },
+            set: { value in
+                switch value {
+                case .folder(let path)?:
+                    location = 0
+                    selectFolder(URL(fileURLWithPath: path))
+                case .favorite(let id)?:
+                    location = 1
+                    selectedRow = id
+                    loadSidebarDraft()
+                case nil:
+                    break
                 }
-                .frame(maxWidth: .infinity, minHeight: 180)
-                .padding(12)
-                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
-                .dropDestination(for: URL.self) { urls, _ in
-                    guard !busy, let url = urls.first, urls.count == 1 else { return false }
-                    selectFolder(url)
-                    return true
+            }
+        )
+    }
+
+    private var recentFolderPaths: [String] {
+        var paths = recentFolders.split(separator: "\n").map(String.init)
+        if let folder, !paths.contains(folder.path) { paths.insert(folder.path, at: 0) }
+        return paths.filter { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    private var sidebar: some View {
+        List(selection: pick) {
+            Section("Folders") {
+                Button(action: chooseFolder) {
+                    Label("Choose a Folder…", systemImage: "plus.circle")
                 }
-                Spacer()
-            } else {
-                Button { Task { await refreshFavorites() } } label: {
-                    Label("Refresh Favorites", systemImage: "arrow.clockwise")
-                }
-                if rows.isEmpty {
-                    Text("No Favorites found. Add folders in Finder, then refresh this list.")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                } else {
-                    List(selection: $selectedRow) {
-                        ForEach(rows, id: \.itemID) { item in
-                            HStack(spacing: 10) {
-                                currentSidebarIcon(item, size: 18)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.displayName.isEmpty ? "Unavailable Favorite" : item.displayName)
-                                        .lineLimit(1)
-                                    if item.path == nil {
-                                        Text("Location unavailable").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 5)
-                            .tag(item.itemID)
-                            .help(item.path ?? "Finder could not resolve this Favorite.")
-                        }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                ForEach(recentFolderPaths, id: \.self) { path in
+                    Label {
+                        Text(FileManager.default.displayName(atPath: path)).lineLimit(1)
+                    } icon: {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().scaledToFit()
+                            .id("\(path)-\(revision)")
                     }
-                    .listStyle(.sidebar)
+                    .help(path)
+                    .tag(Pick.folder(path))
+                }
+            }
+            Section("Favorites") {
+                if rows.isEmpty {
+                    Text("No Favorites yet. Add a folder to Finder’s sidebar, then refresh.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach(rows, id: \.itemID) { item in
+                    Label {
+                        Text(item.displayName.isEmpty ? "Unavailable Favorite" : item.displayName).lineLimit(1)
+                    } icon: {
+                        currentSidebarIcon(item, size: 16)
+                    }
+                    .help(item.path ?? "Finder could not find this Favorite’s folder.")
+                    .tag(Pick.favorite(item.itemID))
                 }
             }
         }
-        .padding(20)
+        .listStyle(.sidebar)
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !busy, let url = urls.first, urls.count == 1 else { return false }
+            location = 0
+            selectFolder(url)
+            return true
+        }
         .disabled(busy)
     }
 
+    // MARK: Editor
+
     private var editor: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 if let target {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(target.lastPathComponent).font(.title2.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(location == 0 ? target.lastPathComponent : (row?.displayName ?? target.lastPathComponent))
+                            .font(.system(size: 34, weight: .black, design: .rounded))
+                            .lineLimit(1)
                         Text(target.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                     }
-                    preview
-                    Divider()
-                    HStack {
-                        Text(location == 0 ? "Folder artwork" : "Sidebar glyph").font(.headline)
-                        Spacer()
-                        Button("Browse Symbols…") { symbolBrowser = true }
-                    }
-                    symbolChoices
-                    HStack {
-                        TextField("SF Symbol name", text: Binding(
-                            get: { location == 0 ? mainSymbol : sidebarSymbol },
-                            set: { value in
-                                if location == 0 { mainSymbol = value; importedImage = nil }
-                                else { sidebarSymbol = value; sidebarSVG = nil; importWarnings = [] }
-                            }
-                        )).textFieldStyle(.roundedBorder)
-                        Button(location == 0 ? "Import Image…" : "Import SVG…", action: importArtwork)
-                    }
-                    if location == 0 {
-                        ColorPicker("Folder color", selection: $folderColor, supportsOpacity: false)
-                            .disabled(importedImage != nil)
-                        if importedImage != nil {
-                            Button("Use folder and symbol") { importedImage = nil }
-                        }
-                        if configManager.config.favorites.contains(where: { $0.enabled && $0.pathMatchCandidates.contains(target.path) }) {
-                            Text("Apply also sets up this folder’s Finder extension to preserve its existing sidebar glyph.")
-                                .font(.caption).foregroundStyle(.secondary)
-                            Button("Open Extension Settings") { FinderSyncAppGenerator.openExtensionsSettings() }
-                        }
-                    } else {
-                        Text("Finder draws sidebar glyphs as monochrome silhouettes.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        if sidebarSVG != nil {
-                            HStack {
-                                Text("Symbol size")
-                                Slider(value: $iconScale, in: Favorite.iconScaleRange)
-                                Text(iconScale, format: .percent.precision(.fractionLength(0))).monospacedDigit()
-                            }
-                        }
-                        if IconAuthority.detect(atPath: target.path) != nil || selectedFavorite?.mode == .advanced {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label("Keep both icons", systemImage: "square.on.square")
-                                Text("Apply sets up a Finder extension for this folder to preserve both icons.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                Button("Open Extension Settings") { FinderSyncAppGenerator.openExtensionsSettings() }
-                            }
-                        }
-                    }
+                    stage
+                    if location == 0 { folderControls(target) } else { glyphControls(target) }
                     ForEach(importWarnings, id: \.self) { Text($0).font(.caption).foregroundStyle(.orange) }
                 } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: location == 0 ? "folder.badge.gearshape" : "sidebar.left")
-                            .font(.system(size: 56)).foregroundStyle(.secondary)
-                        Text(location == 0 ? "Choose a folder to begin" : "Select an existing Favorite")
-                            .font(.title3.weight(.medium))
-                        Text("Preview your changes before applying them.").foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, minHeight: 380)
+                    emptyStage
                 }
-            }.padding(28)
+            }.padding(26)
         }.disabled(busy)
     }
 
-    private var symbolChoices: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 10) {
-            ForEach(["folder.fill", "hammer.fill", "star.fill", "briefcase.fill", "house.fill", "heart.fill", "book.fill", "camera.fill",
-                     "music.note", "photo.fill", "doc.fill", "archivebox.fill", "cloud.fill", "terminal.fill", "leaf.fill", "shippingbox.fill"], id: \.self) { symbol in
+    private var emptyStage: some View {
+        EaselStage(splash: 0) {
+            VStack(spacing: 10) {
+                Image(systemName: "folder.badge.plus").font(.system(size: 44, weight: .semibold))
+                Text("Drop a folder here").font(.system(size: 22, weight: .black, design: .rounded))
+                Text("or pick a folder or Favorite in the sidebar").font(.system(size: 14, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(Easel.ink)
+            .frame(maxWidth: .infinity, minHeight: 320)
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !busy, let url = urls.first, urls.count == 1 else { return false }
+            location = 0
+            selectFolder(url)
+            return true
+        }
+    }
+
+    private var stage: some View {
+        EaselStage(splash: splashCount) {
+            HStack(spacing: 40) {
+                VStack(spacing: 8) {
+                    Group {
+                        if location == 0, let target {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: target.path))
+                                .resizable().scaledToFit().frame(width: 96, height: 96).id(revision)
+                        } else if let row {
+                            currentSidebarIcon(row, size: 44).foregroundStyle(Easel.ink).frame(height: 96)
+                        }
+                    }
+                    Easel.label("now")
+                }
+                Text("→").font(.system(size: 26, weight: .black, design: .rounded)).foregroundStyle(Easel.ink.opacity(0.45))
+                VStack(spacing: 8) {
+                    Group {
+                        if location == 0 {
+                            if let importedImage, !importedIsIcon {
+                                artCanvas(importedImage)
+                            } else {
+                                Image(nsImage: renderedMainIcon(size: 256)).resizable().scaledToFit().frame(width: 150, height: 150)
+                            }
+                        } else {
+                            finderRowPreview
+                        }
+                    }
+                    .scaleEffect(bounce ? 1.08 : 1)
+                    .rotationEffect(.degrees(bounce ? -2 : 0))
+                    Easel.label(location == 0 && importedImage != nil && !importedIsIcon ? "after apply · drag to move" : "after apply")
+                }
+            }
+        }
+    }
+
+    /// The selected Favorite and its neighbours, drawn at Finder's sidebar size.
+    private var finderRowPreview: some View {
+        let index = rows.firstIndex { $0.itemID == selectedRow } ?? 0
+        let nearby = rows.indices.filter { abs($0 - index) <= 1 }.map { rows[$0] }
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Favorites").font(.system(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 8).padding(.bottom, 2)
+            ForEach(nearby, id: \.itemID) { item in
+                HStack(spacing: 8) {
+                    Group {
+                        if item.itemID == selectedRow { sidebarGlyph(size: 15) } else { currentSidebarIcon(item, size: 15) }
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 18)
+                    Text(item.displayName).font(.system(size: 13)).foregroundStyle(.white).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8).frame(height: 26)
+                .background(item.itemID == selectedRow ? Color.white.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(10)
+        .frame(width: 230)
+        .background(Color(white: 0.12).opacity(0.9), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder private func folderControls(_ target: URL) -> some View {
+        PillPicker(selection: $folderTab, options: ["image", "color", "symbol"])
+        switch folderTab {
+        case "image":
+            HStack(spacing: 12) {
+                Button("Import Image…", action: importArtwork)
+                Text(importedImage == nil ? "PNG, JPEG or TIFF. It is painted onto the folder." : "Drag the preview to move the image.")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+            }
+            if let importedImage, !importedIsIcon { zoomControls(importedImage) }
+        case "color":
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(Self.swatches, id: \.name) { swatch in
+                    Button {
+                        folderColor = swatch.color; importedImage = nil
+                    } label: {
+                        VStack(spacing: 5) {
+                            Circle().fill(swatch.color).frame(width: 34, height: 34)
+                                .overlay(Circle().strokeBorder(.primary.opacity(folderColor == swatch.color ? 0.9 : 0.1), lineWidth: folderColor == swatch.color ? 3 : 1))
+                            Text(swatch.name).font(.system(size: 11, weight: .heavy, design: .rounded))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(swatch.name)
+                }
+                ColorPicker("Custom", selection: Binding(get: { folderColor }, set: { folderColor = $0; importedImage = nil }), supportsOpacity: false)
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+            }
+            Button("surprise me", action: surprise)
+                .font(.system(size: 14, weight: .black, design: .rounded))
+                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(.orange)
+        default:
+            stickers
+            symbolField
+        }
+        if configManager.config.favorites.contains(where: { $0.enabled && $0.pathMatchCandidates.contains(target.path) }) {
+            Text("This folder is also a Favorite. Apply sets up its Finder extension so the sidebar glyph stays.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Open Extension Settings") { FinderSyncAppGenerator.openExtensionsSettings() }
+        }
+    }
+
+    @ViewBuilder private func glyphControls(_ target: URL) -> some View {
+        PillPicker(selection: Binding(get: { sidebarSVG == nil ? "symbol" : "svg" },
+                                      set: { if $0 == "svg" { importArtwork() } else { sidebarSVG = nil; importWarnings = [] } }),
+                   options: ["symbol", "svg"])
+        if sidebarSVG == nil {
+            stickers
+            symbolField
+        } else {
+            HStack {
+                Text("Symbol size")
+                Slider(value: $iconScale, in: Favorite.iconScaleRange)
+                Text(iconScale, format: .percent.precision(.fractionLength(0))).monospacedDigit()
+            }
+            Button("Import Another SVG…", action: importArtwork)
+        }
+        Text("Finder draws sidebar glyphs as one-color silhouettes.").font(.caption).foregroundStyle(.secondary)
+        if IconAuthority.detect(atPath: target.path) != nil || selectedFavorite?.mode == .advanced {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Keep both icons", systemImage: "square.on.square")
+                Text("This folder has its own icon. Apply sets up a Finder extension so the folder keeps it and the sidebar shows this glyph.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Open Extension Settings") { FinderSyncAppGenerator.openExtensionsSettings() }
+            }
+        }
+    }
+
+    private var symbolField: some View {
+        HStack {
+            TextField("SF Symbol name", text: Binding(
+                get: { location == 0 ? mainSymbol : sidebarSymbol },
+                set: { value in
+                    if location == 0 { mainSymbol = value; importedImage = nil }
+                    else { sidebarSymbol = value; sidebarSVG = nil; importWarnings = [] }
+                }
+            )).textFieldStyle(.roundedBorder)
+            Button("Browse Symbols…") { symbolBrowser = true }
+        }
+    }
+
+    private static let swatches: [(name: String, color: Color)] = [
+        ("Lagoon", Color(red: 0.15, green: 0.64, blue: 0.95)), ("Mango", Color(red: 1, green: 0.67, blue: 0.18)),
+        ("Lavender", Color(red: 0.65, green: 0.48, blue: 1)), ("Chili", Color(red: 0.94, green: 0.31, blue: 0.24)),
+        ("Moss", Color(red: 0.3, green: 0.69, blue: 0.42)), ("Ink", Color(red: 0.17, green: 0.17, blue: 0.21)),
+    ]
+
+    private static let stickerSymbols = ["folder.fill", "hammer.fill", "star.fill", "briefcase.fill", "house.fill", "heart.fill", "book.fill", "camera.fill",
+                                         "music.note", "photo.fill", "doc.fill", "archivebox.fill", "cloud.fill", "terminal.fill", "leaf.fill", "shippingbox.fill"]
+
+    private func surprise() {
+        folderColor = Self.swatches.randomElement()!.color
+        mainSymbol = Self.stickerSymbols.randomElement()!
+        importedImage = nil
+    }
+
+    private var stickers: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 8), spacing: 10) {
+            ForEach(Self.stickerSymbols, id: \.self) { symbol in
+                let selected = (location == 0 ? (importedImage == nil && mainSymbol == symbol) : (sidebarSVG == nil && sidebarSymbol == symbol))
                 Button {
                     if location == 0 { mainSymbol = symbol; importedImage = nil }
                     else { sidebarSymbol = symbol; sidebarSVG = nil; importWarnings = [] }
                 } label: {
-                    Image(systemName: symbol).font(.system(size: 19)).frame(maxWidth: .infinity, minHeight: 36)
+                    Image(systemName: symbol)
                 }
-                .buttonStyle(.bordered)
-                .tint((location == 0 ? mainSymbol : sidebarSymbol) == symbol ? .accentColor : .secondary)
+                .buttonStyle(StickerButtonStyle(selected: selected))
                 .help(symbol)
                 .accessibilityLabel(symbol.replacingOccurrences(of: ".", with: " "))
             }
         }
-    }
-
-    private var preview: some View {
-        HStack(spacing: 32) {
-            VStack(spacing: 10) {
-                Text("Current").font(.caption).foregroundStyle(.secondary)
-                if location == 0, let target {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: target.path))
-                        .resizable().scaledToFit().frame(width: 82, height: 82).id(revision)
-                } else if let row {
-                    currentSidebarIcon(row, size: 46).frame(height: 82)
-                }
-            }
-            Image(systemName: "arrow.right").foregroundStyle(.tertiary)
-            VStack(spacing: 10) {
-                Text("Preview").font(.caption).foregroundStyle(.secondary)
-                if location == 0 {
-                    if let importedImage, !importedIsIcon {
-                        artEditor(importedImage)
-                    } else {
-                        Image(nsImage: renderedMainIcon()).resizable().scaledToFit().frame(width: 100, height: 100)
-                    }
-                    Text(target?.lastPathComponent ?? "Folder").font(.caption)
-                } else {
-                    sidebarGlyph(size: 46).frame(height: 64)
-                    HStack(spacing: 8) {
-                        sidebarGlyph(size: 16)
-                        Text(row?.displayName ?? "Favorite").font(.system(size: 13)).lineLimit(1)
-                    }
-                    .padding(10)
-                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: 180)
-        .padding(16)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder private func currentSidebarIcon(_ item: SidebarItem, size: CGFloat) -> some View {
@@ -328,9 +441,11 @@ struct ContentView: View {
                     .disabled(busy || history?.previous == nil)
                 Button("Restore Original…") { confirmRestore = true }
                     .disabled(busy || history == nil)
-                Button("Apply") { run { try await apply() } }
-                    .buttonStyle(.borderedProminent).disabled(!canApply)
-                    .keyboardShortcut(.return, modifiers: .command)
+                Button { run { try await apply() } } label: {
+                    Text("apply").font(.system(size: 13, weight: .black, design: .rounded)).padding(.horizontal, 8)
+                }
+                .buttonStyle(.borderedProminent).buttonBorderShape(.capsule).disabled(!canApply)
+                .keyboardShortcut(.return, modifiers: .command)
             }
         }.padding(20)
     }
@@ -339,8 +454,12 @@ struct ContentView: View {
         guard url.isFileURL, (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
             errorMessage = "Choose an accessible folder."; return
         }
-        folder = url.standardizedFileURL
-        message = "Changes apply only to Finder’s main area."
+        let standardized = url.standardizedFileURL
+        if folder != standardized { importedImage = nil; artPlacement = FolderArtPlacement() }
+        folder = standardized
+        recentFolders = ([standardized.path] + recentFolders.split(separator: "\n").map(String.init).filter { $0 != standardized.path })
+            .prefix(6).joined(separator: "\n")
+        message = Self.folderHint
         revision += 1
     }
 
@@ -359,7 +478,7 @@ struct ContentView: View {
         iconScale = favorite?.effectiveIconScale ?? 1
         importWarnings = []
         helperMessage = nil
-        message = "Changes apply only to the selected existing Favorite."
+        message = Self.favoriteHint
         revision += 1
     }
 
@@ -398,6 +517,7 @@ struct ContentView: View {
             importedImage = image
             importedIsIcon = url.pathExtension.lowercased() == "icns"
             artPlacement = FolderArtPlacement()
+            folderTab = "image"
         } else {
             let validation = SymbolValidator.validate(at: url)
             guard validation.isValid else {
@@ -410,10 +530,10 @@ struct ContentView: View {
         }
     }
 
-    /// Preview of the imported image on the folder. Drag pans; pinch or the slider zooms.
-    @ViewBuilder private func artEditor(_ art: NSImage) -> some View {
-        let side: CGFloat = 160
-        Image(nsImage: renderedMainIcon(size: 256)).resizable().scaledToFit().frame(width: side, height: side)
+    /// Imported image on the folder. Drag pans; pinch zooms.
+    private func artCanvas(_ art: NSImage) -> some View {
+        let side: CGFloat = 170
+        return Image(nsImage: renderedMainIcon(size: 256)).resizable().scaledToFit().frame(width: side, height: side)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 1)
                 .onChanged { drag in
@@ -436,6 +556,9 @@ struct ContentView: View {
                 .onEnded { _ in gestureStart = nil })
             .help("Drag to move the image. Pinch to zoom.")
             .accessibilityLabel("Folder image position")
+    }
+
+    private func zoomControls(_ art: NSImage) -> some View {
         HStack {
             Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
             Slider(value: Binding(
@@ -446,7 +569,18 @@ struct ContentView: View {
             Button("Reset") { artPlacement = FolderArtPlacement() }
                 .disabled(artPlacement == FolderArtPlacement())
         }
-        .frame(width: 220)
+        .frame(maxWidth: 320)
+    }
+
+    /// Bounce the preview and splash paint after a successful Apply.
+    private func celebrate() {
+        splashCount += 1
+        guard !reduceMotion else { return }
+        withAnimation(.spring(duration: 0.25, bounce: 0.6)) { bounce = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            withAnimation(.spring(duration: 0.35)) { bounce = false }
+        }
     }
 
     private func renderedMainIcon(size: Int = 1024) -> NSImage {
@@ -511,7 +645,8 @@ struct ContentView: View {
                 try await verifySidebar(favorite, target: target)
             }
         }
-        message = "Icon saved. Check its appearance in Finder."
+        message = "Done. \(location == 0 ? target.lastPathComponent : (row?.displayName ?? target.lastPathComponent)) has a new look. Take a peek in Finder."
+        celebrate()
         await refreshFavorites()
     }
 

@@ -6,12 +6,12 @@ view = (root / 'Roopam/Views/ContentView.swift').read_text()
 
 class RefreshContract(unittest.TestCase):
     def test_list_uses_refreshed_icons(self):
-        row = view.split('ForEach(rows, id:', 1)[1].split('.padding(.vertical, 5)', 1)[0]
+        row = view.split('ForEach(rows, id:', 1)[1].split('.tag(Pick.favorite', 1)[0]
         self.assertIn('currentSidebarIcon(item', row)
         self.assertNotIn('Image(systemName: item.path', row)
 
     def test_current_preview_uses_same_live_source(self):
-        current = view.split('private var preview:', 1)[1].split('Image(systemName: "arrow.right")', 1)[0]
+        current = view.split('private var stage:', 1)[1].split('Easel.label("now")', 1)[0]
         self.assertIn('currentSidebarIcon(row', current)
         self.assertNotIn('favorite = selectedFavorite', current)
 
