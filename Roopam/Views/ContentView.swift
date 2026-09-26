@@ -138,6 +138,17 @@ struct ContentView: View {
         )
     }
 
+    /// Removes a folder from the Folders list only; the folder and its icon are not touched.
+    private func removeFromFolders(_ path: String) {
+        recentFolders = recentFolders.split(separator: "\n").map(String.init).filter { $0 != path }.joined(separator: "\n")
+        if folder?.path == path {
+            folder = nil
+            importedImage = nil
+            artPlacement = FolderArtPlacement()
+        }
+        message = "Removed \(FileManager.default.displayName(atPath: path)) from the list. The folder and its icon are unchanged."
+    }
+
     private var recentFolderPaths: [String] {
         var paths = recentFolders.split(separator: "\n").map(String.init)
         if let folder, !paths.contains(folder.path) { paths.insert(folder.path, at: 0) }
@@ -153,14 +164,8 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 ForEach(recentFolderPaths, id: \.self) { path in
-                    Label {
-                        Text(FileManager.default.displayName(atPath: path)).lineLimit(1)
-                    } icon: {
-                        Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().scaledToFit()
-                            .id("\(path)-\(revision)")
-                    }
-                    .help(path)
-                    .tag(Pick.folder(path))
+                    FolderRow(path: path, revision: revision) { removeFromFolders(path) }
+                        .tag(Pick.folder(path))
                 }
             }
             Section("Favorites") {
@@ -180,6 +185,9 @@ struct ContentView: View {
             }
         }
         .listStyle(.sidebar)
+        .onDeleteCommand {
+            if location == 0, let folder { removeFromFolders(folder.path) }
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard !busy, let url = urls.first, urls.count == 1 else { return false }
             location = 0
@@ -767,5 +775,36 @@ struct IconHistory: Codable {
         let path = Self.file(for: url, sidebar: sidebar)
         try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: path, options: .atomic)
+    }
+}
+
+/// A Folders row whose remove button appears on hover. VoiceOver gets the same action by name.
+private struct FolderRow: View {
+    let path: String
+    let revision: Int
+    let onRemove: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Label {
+                Text(FileManager.default.displayName(atPath: path)).lineLimit(1)
+            } icon: {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().scaledToFit()
+                    .id("\(path)-\(revision)")
+            }
+            Spacer(minLength: 0)
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove from List. The folder and its icon are unchanged.")
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
+            .accessibilityHidden(true)
+        }
+        .help(path)
+        .onHover { hovering = $0 }
+        .accessibilityAction(named: "Remove from List", onRemove)
     }
 }
