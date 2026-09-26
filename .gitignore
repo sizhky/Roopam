@@ -43,3 +43,7 @@ docs/assets/archive/
 # Local Folder Icons build products
 build-local/
 *.log
+
+# Local tool state
+.sesskey
+.vyasa-storage/
