@@ -28,3 +28,15 @@ Original and previous appearance records persist in Application Support/FolderIc
 5. Quit and reopen; restore an original appearance, check an unavailable folder, and confirm Finder only restarts on explicit request.
 
 GUI and Finder behavior require the user's test. Build validation does not establish runtime sidebar compatibility.
+
+## Current icon refresh
+
+The Favorites list and Current preview share icons from the latest Finder snapshot. The snapshot includes the row icon as fallback. An OSType override resolves through its registered bundle's current on-disk type declaration, so changing the symbol behind an unchanged row identifier and OSType is visible after Refresh. Neither display uses the editing draft or saved Favorite configuration as evidence of Finder's current appearance. Unknown icons display an explicit unavailable placeholder. Refresh replaces the displayed icon collection without resetting the draft; superseded refresh results are discarded.
+
+Regression checks cover both display consumers, refresh invalidation, same-code symbol changes, foreign-code isolation, case sensitivity, and removed declarations. The final visual comparison with Finder remains a manual check.
+
+## Image folder icons
+
+An imported PNG, JPEG, or TIFF is painted onto the folder, not used as the icon directly. `FolderArtComposer` loads the three layers macOS 26 uses to draw folders from `CoreTypes.bundle`: `FolderComponent_BackFlap`, `FolderComponent_PaperSheet`, and `FolderComponent_FrontFlap`. The image aspect-fills the back flap's bounds, so it runs continuously across the back tab and the front flap. Each flap pixel takes the image color multiplied by the cube of that flap pixel's brightness relative to the front flap's mean brightness; this keeps the system gradient and makes the back flap darker than the front. The white paper sheet is drawn unchanged between the flaps. Transparent image pixels keep the flap's own color. An imported `.icns` is already a finished icon and is used as-is. If a future macOS removes these layers, the imported image is used as-is.
+
+The raw imported image and a `FolderArtPlacement` (zoom 100–400%, offset as a fraction of the back flap's width and height) are kept in the editor. Dragging the preview pans, and a trackpad pinch or the zoom slider zooms. `FolderArtComposer.clamped` limits the offset so the image always covers the whole folder. Reset returns to 100% zoom, centered. A new import resets the placement. The preview composes at 256 px (about 1 ms) on each change; Apply composes at 1024 px. The layers and the back flap's bounds are loaded once per launch. The system icon from `NSWorkspace.icon(for: .folder)` was rejected as the source because it has no paper sheet.

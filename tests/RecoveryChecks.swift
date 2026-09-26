@@ -30,6 +30,20 @@ struct RecoveryChecks {
         precondition(!row.matches(anyOf: ["/tmp/Other"]), "A different folder must never match a saved selection")
         let unresolved = SidebarItem(itemID: 43, displayName: "Offline", path: nil, osType: nil)
         precondition(!unresolved.matches(anyOf: favorite.pathMatchCandidates), "Unresolved Favorites cannot be edited")
-        print("8 recovery and selection checks passed in \(start.duration(to: .now)).")
+        func declaration(_ symbol: String, code: String = "S123") -> [[String: Any]] {
+            [["UTTypeTagSpecification": ["com.apple.ostype": [code]],
+              "UTTypeIcons": ["UTTypeSymbolName": symbol]]]
+        }
+        let before = SidebarItemManager.symbolName(for: "S123", declarations: declaration("star.fill"))
+        let after = SidebarItemManager.symbolName(for: "S123", declarations: declaration("hammer.fill"))
+        precondition(before == "star.fill" && after == "hammer.fill",
+                     "Refresh must read new artwork even when the row and OSType stay unchanged")
+        precondition(SidebarItemManager.symbolName(for: "S123", declarations: declaration("heart.fill", code: "X789")) == nil,
+                     "A different Favorite's declaration must not supply the displayed icon")
+        precondition(SidebarItemManager.symbolName(for: "s123", declarations: declaration("heart.fill")) == nil,
+                     "OSType icon tags remain case-sensitive")
+        precondition(SidebarItemManager.symbolName(for: "S123", declarations: []) == nil,
+                     "A removed override must not retain its previous displayed symbol")
+        print("12 recovery, selection, and refresh checks passed in \(start.duration(to: .now)).")
     }
 }

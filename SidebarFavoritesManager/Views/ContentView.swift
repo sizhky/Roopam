@@ -9,12 +9,17 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var location = 0
     @State private var rows: [SidebarItem] = []
+    @State private var currentSidebarIcons: [UInt32: NSImage] = [:]
+    @State private var refreshToken = UUID()
     @State private var selectedRow: UInt32?
     @State private var folder: URL?
     @State private var mainSymbol = "hammer.fill"
     @State private var sidebarSymbol = "star.fill"
     @State private var folderColor: Color = .blue
     @State private var importedImage: NSImage?
+    @State private var importedIsIcon = false
+    @State private var artPlacement = FolderArtPlacement()
+    @State private var gestureStart: FolderArtPlacement?
     @State private var sidebarSVG: String?
     @State private var iconScale = 1.0
     @State private var symbolBrowser = false
@@ -139,7 +144,7 @@ struct ContentView: View {
                     List(selection: $selectedRow) {
                         ForEach(rows, id: \.itemID) { item in
                             HStack(spacing: 10) {
-                                Image(systemName: item.path == nil ? "questionmark.folder" : "folder")
+                                currentSidebarIcon(item, size: 18)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(item.displayName.isEmpty ? "Unavailable Favorite" : item.displayName)
                                         .lineLimit(1)
@@ -256,25 +261,19 @@ struct ContentView: View {
                 if location == 0, let target {
                     Image(nsImage: NSWorkspace.shared.icon(forFile: target.path))
                         .resizable().scaledToFit().frame(width: 82, height: 82).id(revision)
-                } else if let favorite = selectedFavorite {
-                    if let svg = favorite.customSVGPath, favorite.iconType == .custom {
-                        SVGThumbnailView(url: configManager.customIconURL(relativePath: svg), size: 46,
-                                         iconScale: CGFloat(favorite.effectiveIconScale))
-                    } else {
-                        Image(systemName: favorite.iconValue).font(.system(size: 46)).frame(height: 82)
-                    }
-                } else {
-                    Image(systemName: "sidebar.left").font(.system(size: 34)).frame(height: 64)
-                    Button("View in Finder") {
-                        if let target { NSWorkspace.shared.activateFileViewerSelecting([target]) }
-                    }.font(.caption)
+                } else if let row {
+                    currentSidebarIcon(row, size: 46).frame(height: 82)
                 }
             }
             Image(systemName: "arrow.right").foregroundStyle(.tertiary)
             VStack(spacing: 10) {
                 Text("Preview").font(.caption).foregroundStyle(.secondary)
                 if location == 0 {
-                    Image(nsImage: renderedMainIcon()).resizable().scaledToFit().frame(width: 100, height: 100)
+                    if let importedImage, !importedIsIcon {
+                        artEditor(importedImage)
+                    } else {
+                        Image(nsImage: renderedMainIcon()).resizable().scaledToFit().frame(width: 100, height: 100)
+                    }
                     Text(target?.lastPathComponent ?? "Folder").font(.caption)
                 } else {
                     sidebarGlyph(size: 46).frame(height: 64)
@@ -290,6 +289,16 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, minHeight: 180)
         .padding(16)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    @ViewBuilder private func currentSidebarIcon(_ item: SidebarItem, size: CGFloat) -> some View {
+        if let image = currentSidebarIcons[item.itemID] {
+            Image(nsImage: image).resizable().renderingMode(.template)
+                .scaledToFit().frame(width: size, height: size).id("\(item.itemID)-\(revision)")
+        } else {
+            Image(systemName: "questionmark.folder").font(.system(size: size))
+                .frame(width: size, height: size).help("Finder's current icon could not be read.")
+        }
     }
 
     @ViewBuilder private func sidebarGlyph(size: CGFloat) -> some View {
@@ -355,15 +364,24 @@ struct ContentView: View {
     }
 
     @MainActor private func refreshFavorites() async {
+        let token = UUID()
+        refreshToken = token
         do {
             let snapshot = try await Task.detached { try SidebarItemManager.shared.snapshot() }.value
+            guard refreshToken == token else { return }
+            currentSidebarIcons = Dictionary(uniqueKeysWithValues: snapshot.compactMap { item in
+                SidebarItemManager.currentIcon(for: item).map { (item.itemID, $0) }
+            })
             rows = snapshot
+            revision += 1
             if let selectedRow, !snapshot.contains(where: { $0.itemID == selectedRow }) {
                 self.selectedRow = nil
                 message = "That Favorite was removed from Finder."
             }
         } catch {
+            guard refreshToken == token else { return }
             rows = []
+            currentSidebarIcons = [:]
             errorMessage = error.localizedDescription
         }
     }
@@ -378,6 +396,8 @@ struct ContentView: View {
                 errorMessage = "This image could not be read."; return
             }
             importedImage = image
+            importedIsIcon = url.pathExtension.lowercased() == "icns"
+            artPlacement = FolderArtPlacement()
         } else {
             let validation = SymbolValidator.validate(at: url)
             guard validation.isValid else {
@@ -390,8 +410,49 @@ struct ContentView: View {
         }
     }
 
-    private func renderedMainIcon() -> NSImage {
-        if let importedImage { return importedImage }
+    /// Preview of the imported image on the folder. Drag pans; pinch or the slider zooms.
+    @ViewBuilder private func artEditor(_ art: NSImage) -> some View {
+        let side: CGFloat = 160
+        Image(nsImage: renderedMainIcon(size: 256)).resizable().scaledToFit().frame(width: side, height: side)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 1)
+                .onChanged { drag in
+                    let start = gestureStart ?? artPlacement
+                    gestureStart = start
+                    var next = start
+                    next.offset.width += drag.translation.width / side
+                    next.offset.height -= drag.translation.height / side
+                    artPlacement = FolderArtComposer.clamped(next, artSize: art.size)
+                }
+                .onEnded { _ in gestureStart = nil })
+            .simultaneousGesture(MagnifyGesture()
+                .onChanged { pinch in
+                    let start = gestureStart ?? artPlacement
+                    gestureStart = start
+                    var next = start
+                    next.zoom *= pinch.magnification
+                    artPlacement = FolderArtComposer.clamped(next, artSize: art.size)
+                }
+                .onEnded { _ in gestureStart = nil })
+            .help("Drag to move the image. Pinch to zoom.")
+            .accessibilityLabel("Folder image position")
+        HStack {
+            Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+            Slider(value: Binding(
+                get: { artPlacement.zoom },
+                set: { artPlacement = FolderArtComposer.clamped(FolderArtPlacement(zoom: $0, offset: artPlacement.offset), artSize: art.size) }
+            ), in: FolderArtPlacement.zoomRange).accessibilityLabel("Image zoom")
+            Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
+            Button("Reset") { artPlacement = FolderArtPlacement() }
+                .disabled(artPlacement == FolderArtPlacement())
+        }
+        .frame(width: 220)
+    }
+
+    private func renderedMainIcon(size: Int = 1024) -> NSImage {
+        if let importedImage {
+            return importedIsIcon ? importedImage : FolderArtComposer.icon(with: importedImage, placement: artPlacement, size: size)
+        }
         let color = NSColor(folderColor)
         return NSImage(size: NSSize(width: 512, height: 512), flipped: false) { _ in
             let rect = NSRect(x: 20, y: 64, width: 472, height: 366)

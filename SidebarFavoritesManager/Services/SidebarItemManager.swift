@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import CoreServices
 
 /// A single row of Finder's Favorites list.
 struct SidebarItem: Equatable, Sendable {
@@ -15,6 +17,7 @@ struct SidebarItem: Equatable, Sendable {
 
     /// The row's current `OverrideIcon.OSType`, or nil when it carries no override.
     let osType: String?
+    var iconData: Data? = nil
 
     /// True when this row points at one of `candidates`.
     ///
@@ -67,6 +70,37 @@ final class SidebarItemManager: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return try loadSnapshot()
+    }
+
+    // Implements docs/folder-icons/design.md: Current reads Finder's icon declaration, not the editing draft.
+    @MainActor
+    static func currentIcon(for row: SidebarItem) -> NSImage? {
+        if let code = row.osType,
+           let type = UTTypeCreatePreferredIdentifierForTag("com.apple.ostype" as CFString, code as CFString, nil)?.takeRetainedValue(),
+           let bundleURL = UTTypeCopyDeclaringBundleURL(type)?.takeRetainedValue() as URL? {
+            let plistURL = bundleURL.appendingPathComponent("Contents/Info.plist")
+            if let data = try? Data(contentsOf: plistURL),
+               let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
+               let symbol = symbolName(for: code, declarations: info["UTExportedTypeDeclarations"] as? [[String: Any]] ?? []) {
+                if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: row.displayName) {
+                    return image
+                }
+                if let image = Bundle(url: bundleURL)?.image(forResource: NSImage.Name(symbol)) {
+                    return image.copy() as? NSImage
+                }
+            }
+        }
+        return row.iconData.flatMap(NSImage.init(data:))
+    }
+
+    static func symbolName(for code: String, declarations: [[String: Any]]) -> String? {
+        for declaration in declarations {
+            guard let tags = declaration["UTTypeTagSpecification"] as? [String: Any] else { continue }
+            let codes = tags["com.apple.ostype"] as? [String] ?? (tags["com.apple.ostype"] as? String).map { [$0] } ?? []
+            guard codes.contains(code) else { continue }
+            return (declaration["UTTypeIcons"] as? [String: Any])?["UTTypeSymbolName"] as? String
+        }
+        return nil
     }
 
     /// The first row resolving to any of `candidates`, or nil.
@@ -209,7 +243,8 @@ final class SidebarItemManager: @unchecked Sendable {
             itemID: identifier.uint32Value,
             displayName: row[SFLItemDisplayNameKey] as? String ?? "",
             path: row[SFLItemPathKey] as? String,
-            osType: row[SFLItemOSTypeKey] as? String
+            osType: row[SFLItemOSTypeKey] as? String,
+            iconData: row[SFLItemIconDataKey] as? Data
         )
     }
 

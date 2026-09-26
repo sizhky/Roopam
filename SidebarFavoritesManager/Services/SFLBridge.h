@@ -37,6 +37,7 @@ extern NSString * const SFLBridgeErrorDomain;
 extern NSString * const SFLItemIDKey;           ///< NSNumber wrapping a uint32_t. Always present.
 extern NSString * const SFLItemDisplayNameKey;  ///< NSString. Always present (empty string if unnamed).
 extern NSString * const SFLItemPathKey;         ///< NSString. ABSENT when the row cannot be resolved.
+extern NSString * const SFLItemIconDataKey;     ///< NSData. Snapshot of the row icon when available.
 extern NSString * const SFLItemOSTypeKey;       ///< NSString. ABSENT when no override is set.
 
 /// Failures that have no OSStatus of their own.

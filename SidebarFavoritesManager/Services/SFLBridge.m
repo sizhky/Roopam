@@ -11,6 +11,7 @@
 
 #import "SFLBridge.h"
 #import <CoreServices/CoreServices.h>
+#import <AppKit/AppKit.h>
 
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -21,6 +22,7 @@ NSString * const SFLItemIDKey          = @"itemID";
 NSString * const SFLItemDisplayNameKey = @"displayName";
 NSString * const SFLItemPathKey        = @"path";
 NSString * const SFLItemOSTypeKey      = @"osType";
+NSString * const SFLItemIconDataKey    = @"iconData";
 
 #pragma mark - Helpers
 
@@ -189,6 +191,13 @@ static BOOL SFLIsWellFormedOSType(NSString * _Nullable osType) {
             row[SFLItemOSTypeKey] = osType;
         }
 
+        IconRef icon = LSSharedFileListItemCopyIconRef(item);
+        if (icon != NULL) {
+            NSImage *image = [[NSImage alloc] initWithIconRef:icon];
+            NSData *data = image.TIFFRepresentation;
+            if (data != nil) { row[SFLItemIconDataKey] = data; }
+            ReleaseIconRef(icon);
+        }
         [rows addObject:row];
     }
 
