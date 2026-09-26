@@ -1,5 +1,5 @@
 {
-  description = "SidebarFavorites - Add custom folders to macOS Finder's sidebar with custom SF Symbol icons";
+  description = "Roopam - custom Finder folder icons and Favorites sidebar glyphs for macOS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -7,20 +7,20 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachSystem [ "aarch64-darwin" "x86_64-darwin" ] (system:
+    flake-utils.lib.eachSystem [ "aarch64-darwin" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        sidebarfavorites = pkgs.callPackage ./nix/default.nix { };
+        roopam = pkgs.callPackage ./nix/default.nix { };
       in
       {
         packages = {
-          default = sidebarfavorites;
-          sidebarfavorites = sidebarfavorites;
+          default = roopam;
+          roopam = roopam;
         };
 
         apps.default = {
           type = "app";
-          program = "${sidebarfavorites}/Applications/SidebarFavorites Manager.app/Contents/MacOS/SidebarFavorites Manager";
+          program = "${roopam}/Applications/Roopam.app/Contents/MacOS/Roopam";
         };
       }
     );

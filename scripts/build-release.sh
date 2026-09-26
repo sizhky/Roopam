@@ -1,22 +1,23 @@
 #!/bin/bash
 set -e
 
-# Build Release Script for SidebarFavorites Manager
-# Creates a signed, notarized, distributable DMG file
+# Build Release Script for Roopam
+# Creates a signed, notarized (when credentials exist), distributable DMG file
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 RELEASE_DIR="$BUILD_DIR/Release"
 DMG_DIR="$BUILD_DIR/DMG"
-APP_NAME="SidebarFavorites Manager"
-DMG_NAME="SidebarFavorites"
+APP_NAME="Roopam"
+DMG_NAME="Roopam"
+REPO_URL="${REPO_URL:-https://github.com/sizhky/Roopam}"
 
 # Get version from Info.plist
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/SidebarFavoritesManager/Info.plist")
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PROJECT_DIR/Roopam/Info.plist")
 DMG_FILENAME="${DMG_NAME}-${VERSION}.dmg"
 
-echo "=== Building SidebarFavorites Manager v${VERSION} ==="
+echo "=== Building $APP_NAME v${VERSION} ==="
 echo ""
 
 # Step 1: Clean previous builds
@@ -37,20 +38,10 @@ fi
 mkdir -p "$RELEASE_DIR"
 mkdir -p "$DMG_DIR"
 
-# Step 2: Generate Xcode project
-echo "Generating Xcode project..."
-cd "$PROJECT_DIR"
-xcodegen generate
-
-# Step 3: Build Release
-echo "Building Release configuration..."
-xcodebuild -project SidebarFavorites.xcodeproj \
-    -scheme SidebarFavoritesManager \
-    -configuration Release \
-    -derivedDataPath "$BUILD_DIR/DerivedData" \
-    CONFIGURATION_BUILD_DIR="$RELEASE_DIR" \
-    CODE_SIGNING_ALLOWED=NO \
-    build
+# Step 2-3: Build with the same compiler invocation as local development.
+echo "Building $APP_NAME..."
+bash "$SCRIPT_DIR/build-local.sh"
+cp -R "$PROJECT_DIR/build-local/$APP_NAME.app" "$RELEASE_DIR/"
 
 # Step 4: Verify app was built
 if [ ! -d "$RELEASE_DIR/$APP_NAME.app" ]; then
@@ -176,7 +167,7 @@ ln -s /Applications "$DMG_STAGING/Applications"
 # Use the app's own icon as the disk image's volume icon. The file must be
 # named .VolumeIcon.icns at the volume root AND the volume needs its custom-icon
 # flag set, which is done on the mounted read/write image further below.
-VOLUME_ICON_SRC="$PROJECT_DIR/SidebarFavoritesManager/Resources/AppIcon.icns"
+VOLUME_ICON_SRC="$PROJECT_DIR/Roopam/Resources/AppIcon.icns"
 if [ -f "$VOLUME_ICON_SRC" ]; then
     cp "$VOLUME_ICON_SRC" "$DMG_STAGING/.VolumeIcon.icns"
 fi
@@ -184,11 +175,11 @@ fi
 # Create README file with instructions
 if [ "$DO_NOTARIZE" = "1" ]; then
     cat > "$DMG_STAGING/README.txt" << 'EOF'
-SidebarFavorites Manager
-========================
+Roopam
+============
 
 Installation:
-1. Drag "SidebarFavorites Manager" to the Applications folder
+1. Drag "Roopam" to the Applications folder
 2. Open it from Applications - it's signed and notarized by Apple, so
    it will launch normally with no security warnings.
 
@@ -209,18 +200,18 @@ The Manager app is only needed when you want to add, edit, or delete favorites.
 Uninstall:
 1. Delete favorites in the app (this removes the sidebar rows it added and
    restores the original icon on rows you added yourself)
-2. Drag "SidebarFavorites Manager" to Trash
-3. Delete ~/Library/Application Support/SidebarFavorites (optional)
+2. Drag "Roopam" to Trash
+3. Delete ~/Library/Application Support/Roopam (optional)
 
-Source code: https://github.com/ivg-design/SidebarFavorites
+Source code: REPO_URL_PLACEHOLDER
 EOF
 else
     cat > "$DMG_STAGING/README.txt" << 'EOF'
-SidebarFavorites Manager
-========================
+Roopam
+============
 
 Installation:
-1. Drag "SidebarFavorites Manager" to the Applications folder
+1. Drag "Roopam" to the Applications folder
 
 First Run (Security Approval):
 Since this app is not notarized by Apple, macOS will block it on first run.
@@ -247,12 +238,14 @@ The Manager app is only needed when you want to add, edit, or delete favorites.
 Uninstall:
 1. Delete favorites in the app (this removes the sidebar rows it added and
    restores the original icon on rows you added yourself)
-2. Drag "SidebarFavorites Manager" to Trash
-3. Delete ~/Library/Application Support/SidebarFavorites (optional)
+2. Drag "Roopam" to Trash
+3. Delete ~/Library/Application Support/Roopam (optional)
 
-Source code: https://github.com/ivg-design/SidebarFavorites
+Source code: REPO_URL_PLACEHOLDER
 EOF
 fi
+
+sed -i '' "s|REPO_URL_PLACEHOLDER|$REPO_URL|" "$DMG_STAGING/README.txt"
 
 # Step 10: Create DMG
 echo "Creating DMG..."
@@ -375,9 +368,7 @@ fi
 echo ""
 echo "To test, run:"
 echo "  open \"$DMG_PATH\""
-echo ""
-echo "To upload to GitHub Releases:"
-echo "  1. Go to https://github.com/ivg-design/SidebarFavorites/releases"
-echo "  2. Click 'Create a new release'"
-echo "  3. Tag: v${VERSION}"
-echo "  4. Upload: $DMG_FILENAME"
+
+# Checksum published beside the DMG by scripts/release.sh.
+(cd "$DMG_DIR" && shasum -a 256 "$DMG_FILENAME" > "$DMG_FILENAME.sha256")
+echo "Checksum: $DMG_PATH.sha256"

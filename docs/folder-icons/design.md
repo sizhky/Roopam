@@ -17,7 +17,7 @@ Reading Favorites does not apply icons. Missing, inaccessible, or removed Favori
 
 Keeping a custom main-area icon and a sidebar glyph uses the upstream per-folder Finder Sync helper. Apply explains helper setup when necessary and reports activation status. Future macOS compatibility requires verification because sidebar integration uses private APIs.
 
-Original and previous appearance records persist in Application Support/FolderIcons/History. Folder images are restored from TIFF snapshots of the displayed custom icon; absent custom icons restore the system icon. Sidebar snapshots preserve the prior override and app configuration.
+Original and previous appearance records persist in Application Support/Roopam/History. Folder images are restored from TIFF snapshots of the displayed custom icon; absent custom icons restore the system icon. Sidebar snapshots preserve the prior override and app configuration.
 
 ## Manual acceptance
 
@@ -40,3 +40,11 @@ Regression checks cover both display consumers, refresh invalidation, same-code 
 An imported PNG, JPEG, or TIFF is painted onto the folder, not used as the icon directly. `FolderArtComposer` loads the three layers macOS 26 uses to draw folders from `CoreTypes.bundle`: `FolderComponent_BackFlap`, `FolderComponent_PaperSheet`, and `FolderComponent_FrontFlap`. The image aspect-fills the back flap's bounds, so it runs continuously across the back tab and the front flap. Each flap pixel takes the image color multiplied by the cube of that flap pixel's brightness relative to the front flap's mean brightness; this keeps the system gradient and makes the back flap darker than the front. The white paper sheet is drawn unchanged between the flaps. Transparent image pixels keep the flap's own color. An imported `.icns` is already a finished icon and is used as-is. If a future macOS removes these layers, the imported image is used as-is.
 
 The raw imported image and a `FolderArtPlacement` (zoom 100–400%, offset as a fraction of the back flap's width and height) are kept in the editor. Dragging the preview pans, and a trackpad pinch or the zoom slider zooms. `FolderArtComposer.clamped` limits the offset so the image always covers the whole folder. Reset returns to 100% zoom, centered. A new import resets the placement. The preview composes at 256 px (about 1 ms) on each change; Apply composes at 1024 px. The layers and the back flap's bounds are loaded once per launch. The system icon from `NSWorkspace.icon(for: .folder)` was rejected as the source because it has no paper sheet.
+
+## Data folder
+
+App data lives in `~/Library/Application Support/Roopam`; the bundle identifier is `local.roopam.Roopam`. Builds before the Roopam rename used `FolderIcons` and `local.foldericons.SidebarFavoritesManager`. The app keeps no UserDefaults, so the identifier change loses no settings.
+
+On launch, before `config.json` loads, `ConfigManager.migrateLegacyDataFolder` moves `FolderIcons` to `Roopam` when only `FolderIcons` exists and is a real directory. Launch Services knows the sidebar icon helper (`SidebarFavoritesIcons.app`) and each both-icons host (`AdvancedApps/*.app`) by path. The migration unregisters each at the old path, moves the folder, and registers each at the new path with the same `lsregister -f -R -trusted` flags the builders use. If the move fails, it re-registers the old paths and the app keeps using `FolderIcons` for that launch.
+
+The helper bundle identifier, UTI prefix (`local.foldericons.SidebarFavorites.icon.`), Finder Sync extension identifiers, and `SBF-` display names are unchanged. Users never see the identifiers, and changing them would require re-registering every sidebar icon and re-enabling every extension. Strings in `MigrationService` describe upstream SidebarFavorites 0.6 artifacts and stay as they are.

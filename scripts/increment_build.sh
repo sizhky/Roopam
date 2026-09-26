@@ -1,5 +1,5 @@
 #!/bin/bash
-# Auto-increment build number for SidebarFavorites
+# Auto-increment build number for Roopam
 # Works for both Xcode builds and CLI builds
 #
 # Usage:
@@ -18,7 +18,7 @@ elif [ -n "$1" ]; then
 else
     # Default to Manager's Info.plist relative to script location
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    PLIST_PATH="${SCRIPT_DIR}/../SidebarFavoritesManager/Info.plist"
+    PLIST_PATH="${SCRIPT_DIR}/../Roopam/Info.plist"
 fi
 
 # Check if plist exists

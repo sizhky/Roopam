@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 
 root = Path(__file__).resolve().parents[1]
-view = (root / 'SidebarFavoritesManager/Views/ContentView.swift').read_text()
+view = (root / 'Roopam/Views/ContentView.swift').read_text()
 
 class RefreshContract(unittest.TestCase):
     def test_list_uses_refreshed_icons(self):

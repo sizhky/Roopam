@@ -1,4 +1,4 @@
-name: SidebarFavorites
+name: Roopam
 options:
   bundleIdPrefix: com.ivg-design
   deploymentTarget:
@@ -18,11 +18,11 @@ settings:
 
 targets:
   # Main Manager App
-  SidebarFavoritesManager:
+  Roopam:
     type: application
     platform: macOS
     sources:
-      - path: SidebarFavoritesManager
+      - path: Roopam
         excludes:
           # Sources for the generated Finder Sync helper - a separate program,
           # compiled by the Build FinderSync Template phase below, never linked
@@ -30,12 +30,12 @@ targets:
           - "FinderSyncTemplate/**"
     settings:
       base:
-        INFOPLIST_FILE: SidebarFavoritesManager/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: local.foldericons.SidebarFavoritesManager
-        PRODUCT_NAME: Folder Icons
+        INFOPLIST_FILE: Roopam/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: local.roopam.Roopam
+        PRODUCT_NAME: Roopam
         MACOSX_DEPLOYMENT_TARGET: "26.0"
         SWIFT_VERSION: "5.9"
-        SWIFT_OBJC_BRIDGING_HEADER: SidebarFavoritesManager/SidebarFavoritesManager-Bridging-Header.h
+        SWIFT_OBJC_BRIDGING_HEADER: Roopam/Roopam-Bridging-Header.h
         CLANG_ENABLE_MODULES: YES
     postBuildScripts:
       # Advanced ("both icons") mode clones these two binaries per favorite.
@@ -46,7 +46,7 @@ targets:
       # generated appex's Info.plist.
       - name: Build FinderSync Template
         script: |
-          SRC="${SRCROOT}/SidebarFavoritesManager/FinderSyncTemplate"
+          SRC="${SRCROOT}/Roopam/FinderSyncTemplate"
           DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/FinderSyncTemplate"
           mkdir -p "$DEST"
           xcrun swiftc -O -module-name SBFAdvHost \
@@ -73,10 +73,10 @@ targets:
         basedOnDependencyAnalysis: false
 
 schemes:
-  SidebarFavoritesManager:
+  Roopam:
     build:
       targets:
-        SidebarFavoritesManager: all
+        Roopam: all
     run:
       config: Debug
     profile:

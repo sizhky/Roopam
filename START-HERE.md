@@ -1,6 +1,6 @@
-# Folder Icons
+# Roopam
 
-Open `build-local/Folder Icons.app` on this Mac. This local build targets macOS Tahoe 26 and later.
+Open `build-local/Roopam.app` on this Mac. This local build targets macOS Tahoe 26 and later.
 
 1. Select **Finder main area**, choose or drop a folder, select a color and symbol or import an image, then Apply.
 2. Select **Finder Favorites sidebar**, select an existing Favorite, choose a symbol or SVG, then Apply.
@@ -10,7 +10,7 @@ Open `build-local/Folder Icons.app` on this Mac. This local build targets macOS 
 
 Favorites must already exist in Finder. There is no Add Favorite action. Unresolved Favorites are visible but cannot be edited.
 
-The app stores separate settings and recovery records in `~/Library/Application Support/FolderIcons/`. Original icon records include the folder's device and inode identity, so replacing a folder at the same path does not reuse its predecessor's backup. Moving a folder to another path starts a separate history.
+The app stores separate settings and recovery records in `~/Library/Application Support/Roopam/` (moved from `FolderIcons/` on first launch after the rename). Original icon records include the folder's device and inode identity, so replacing a folder at the same path does not reuse its predecessor's backup. Moving a folder to another path starts a separate history.
 
 This is a local ad-hoc signed build, not a notarized distribution. Finder integration and extension activation still need a manual test on the target Mac; compiling and unit checks cannot establish compatibility with every macOS release.
 

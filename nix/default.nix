@@ -7,12 +7,13 @@
 }:
 
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "sidebarfavorites";
+  pname = "roopam";
   version = "1.2.2";
 
   src = fetchurl {
-    url = "https://github.com/ivg-design/SidebarFavorites/releases/download/v${finalAttrs.version}/SidebarFavorites-${finalAttrs.version}.dmg";
-    hash = "sha256-723Ov1G7tZILj6tyU6wAGnXWq6TgEylP7yuxbsoMhMw=";
+    url = "https://github.com/sizhky/Roopam/releases/download/v${finalAttrs.version}/Roopam-${finalAttrs.version}.dmg";
+    # Set after the first Roopam release: nix hash convert --hash-algo sha256 "$(cut -d' ' -f1 Roopam-<version>.dmg.sha256)"
+    hash = lib.fakeHash;
   };
 
   nativeBuildInputs = [ _7zz ];
@@ -27,7 +28,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
     mkdir -p "$out/Applications"
-    cp -R "SidebarFavorites Manager.app" "$out/Applications/"
+    cp -R "Roopam.app" "$out/Applications/"
     runHook postInstall
   '';
 
@@ -37,15 +38,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   passthru.updateScript = nix-update-script { };
 
   meta = {
-    description = "Add custom folders to macOS Finder's sidebar with custom SF Symbol icons";
-    homepage = "https://github.com/ivg-design/SidebarFavorites";
-    changelog = "https://github.com/ivg-design/SidebarFavorites/releases/tag/v${finalAttrs.version}";
+    description = "Custom Finder folder icons and Favorites sidebar glyphs for macOS";
+    homepage = "https://github.com/sizhky/Roopam";
+    changelog = "https://github.com/sizhky/Roopam/releases/tag/v${finalAttrs.version}";
     license = lib.licenses.mit;
-    # For nixpkgs submission, add yourself to nixpkgs maintainers list first
-    # then use: maintainers = with lib.maintainers; [ ivg-design ];
     maintainers = [ ];
-    platforms = lib.platforms.darwin;
-    mainProgram = "SidebarFavorites Manager";
+    platforms = [ "aarch64-darwin" ];
+    mainProgram = "Roopam";
     sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
   };
 })
