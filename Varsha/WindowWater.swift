@@ -130,8 +130,8 @@ enum Fluid {
     static var viscosity: Float = 0.08
     static var airDrag: Float = 1.8
     static let contactRange: Float = 1.5 * radius
-    static var pin: Float = 4000
-    static var substrateDrag: Float = 15
+    static var pin: Float = 2500
+    static var substrateDrag: Float = 8
     static let evaporation: Float = 0.03
     static let impactRetention: CGFloat = 0.1
     static var scorrK: Float = 0.02
@@ -141,7 +141,7 @@ enum Fluid {
     static let sleepTime: Float = 0.5
     static let maxSpeed: Float = 3000
     static let splatRadius: Float = 2.6 * spacing
-    static let threshold: Float = 1.0
+    static let threshold: Float = 0.8
 
     static func poly6(_ r2: Float) -> Float {
         let d = h * h - r2
@@ -275,11 +275,10 @@ final class WindowWater {
         return true
     }
 
-    /// Rain with a pane crossing strikes the glass face there; other rain strikes the first window edge it meets.
+    /// Falling rain strikes the first window edge it meets, top or side, and enters the fluid just outside it.
     @discardableResult
     func catchRain(from a: CGPoint, to b: CGPoint, on id: Int? = nil, volume: CGFloat = 2,
-                   velocity: CGVector = CGVector(dx: 0, dy: 700), pane: CGFloat? = nil) -> CGPoint? {
-        if let pane { return catchFace(from: a, to: b, on: id, pane: pane, volume: volume, velocity: velocity) }
+                   velocity: CGVector = CGVector(dx: 0, dy: 700)) -> CGPoint? {
         let hits = windows.compactMap { w -> (WindowFrame, CGPoint, CGFloat)? in
             guard id == nil || w.id == id, let hit = w.edgeHit(from: a, to: b),
                   visible(CGPoint(x: hit.point.x - hit.normal.dx * 0.1, y: hit.point.y - hit.normal.dy * 0.1), on: w.id) else { return nil }
@@ -291,23 +290,6 @@ final class WindowWater {
                              y: hit.1.y - velocity.dy / speed * (r + CGFloat(Fluid.radius)))
         spawn(at: center, radius: r, velocity: velocity, window: hit.0.id, mode: Particle.side)
         return hit.1
-    }
-
-    private func catchFace(from a: CGPoint, to b: CGPoint, on id: Int?, pane: CGFloat,
-                           volume: CGFloat, velocity: CGVector) -> CGPoint? {
-        guard let w = windows.first(where: { $0.id == id }) else { return nil }
-        let y = w.rect.minY + pane * w.rect.height
-        guard a.y < y, b.y >= y else { return nil }
-        let hit = CGPoint(x: a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y), y: y)
-        let x = hit.x - w.rect.minX, inset = Glass.inset(x, width: w.rect.width)
-        guard x >= 0, x <= w.rect.width, y - w.rect.minY >= inset, w.rect.maxY - y >= inset,
-              visible(hit, on: w.id) else { return nil }
-        let wall = velocities[w.id] ?? .zero
-        let k = Fluid.impactRetention
-        spawn(at: hit, radius: cbrt(volume),
-              velocity: CGVector(dx: wall.dx + (velocity.dx - wall.dx) * k, dy: wall.dy + (velocity.dy - wall.dy) * k),
-              window: w.id, mode: Particle.face)
-        return hit
     }
 
     /// Rain moving toward the viewer lands on the frontmost glass under its impact point:

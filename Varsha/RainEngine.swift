@@ -16,7 +16,6 @@ struct RainDrop {
     var front: Bool     // drawn in front of windows
     var seed = CGFloat.random(in: 0.7...1.3)
     var window: Int? = nil
-    var pane: CGFloat? = nil   // fraction of the target window's height where the drop crosses its glass
     var impacted = false
 }
 
@@ -47,12 +46,12 @@ final class RainEngine {
 
     static func windSpeed(_ p: RainParams) -> CGFloat { p.wind * 320 }
 
-    /// Share of rain aimed at a window that crosses its glass instead of its top edge.
-    static let faceShare: CGFloat = 0.9
+    /// Share of background rain aimed at a window's outline; the rest falls behind every window.
+    static let aimedShare: CGFloat = 0.35
 
     /// Inward drops per second per megapixel of screen.
     static func inwardRate(area: CGFloat, params p: RainParams) -> CGFloat {
-        area / 1_000_000 * 45 * pow(p.intensity, 1.2) * p.densityScale
+        area / 1_000_000 * 90 * pow(p.intensity, 1.2) * p.densityScale
     }
 
     func step(dt: CGFloat, params p: RainParams, windowIDs: [Int] = [],
@@ -108,11 +107,10 @@ final class RainEngine {
         let front = CGFloat.random(in: 0...1) < frontShare
         let flat = 1 - p.depth * 0.7
         let near = front ? CGFloat.random(in: 0.6...1) : CGFloat.random(in: 0...0.6) * flat + 0.2 * (1 - flat)
-        let window = !front && CGFloat.random(in: 0...1) < 0.8 ? windowIDs.randomElement() : nil
+        let window = !front && CGFloat.random(in: 0...1) < Self.aimedShare ? windowIDs.randomElement() : nil
         return RainDrop(x: .random(in: -80...(size.width + 80)),
                         y: anywhere ? .random(in: 0...size.height) : .random(in: -120...(-10)),
-                        near: near, front: front, window: window,
-                        pane: window != nil && CGFloat.random(in: 0...1) < Self.faceShare ? .random(in: 0.03...0.97) : nil)
+                        near: near, front: front, window: window)
     }
 }
 

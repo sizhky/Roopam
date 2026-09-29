@@ -75,14 +75,12 @@ final class RainView: NSView {
     }
 
     /// Streaks fade from tail to head in three butt-capped segments, so joins do not double the alpha.
-    /// Rain aimed at a window's edge is hidden behind that window and every window in front of it;
-    /// rain striking its glass passes in front of it.
+    /// Rain aimed at a window's edge is hidden behind that window and every window in front of it.
     private func drawRain(_ ctx: CGContext) {
         let foreground = layer_ == .front
         let sway = RainEngine.windSpeed(params)
-        var ahead: [Int: [CGRect]] = [:], occluders: [Int: [CGRect]] = [:], above: [CGRect] = []
+        var occluders: [Int: [CGRect]] = [:], above: [CGRect] = []
         for w in water.windows {
-            ahead[w.id] = above
             above.append(w.rect.offsetBy(dx: -screenOrigin.x, dy: -screenOrigin.y))
             occluders[w.id] = above
         }
@@ -91,7 +89,7 @@ final class RainView: NSView {
             let len = RainEngine.length(of: d, params: params)
             let dx = sway * (0.4 + d.near) / (520 + 900 * d.near) * len
             let a = CGPoint(x: d.x - dx, y: d.y - len), b = CGPoint(x: d.x, y: d.y)
-            let hidden = d.window.map { (d.pane == nil ? occluders : ahead)[$0] ?? [] } ?? []
+            let hidden = d.window.map { occluders[$0] ?? [] } ?? []
             let spans = Occlusion.spans(from: a, to: b, outside: hidden)
             let bucket = Int(min(0.999, d.near) * 3)
             for segment in 0..<3 {

@@ -264,7 +264,7 @@ kernel void finish(device Particle *ps [[buffer(0)]], device const float *surfac
         Window w = ws[wi];
         float2 local = q.p - w.origin;
         float defect = valueNoise(local / 2.5 + 17.0, w.id + 7);
-        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 3.0 * pow(defect, 6.0);
+        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 1.5 * pow(defect, 6.0);
         float2 slip = (q.p - q.x) - w.velocity * P.dt;
         float2 normal = dot(slip, n) * n, tangent = slip - normal;
         float hold = P.pin * s * energy * P.dt * P.dt, l = length(tangent);
@@ -373,7 +373,7 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
     int2 last = int2(field.get_width() - 1, field.get_height() - 1);
     auto height = [&](int2 o) {
         float d = field.read(uint2(clamp(c + o, int2(0), last))).r;
-        return smoothstep(V.threshold * 0.7, V.threshold * 2.2, d);
+        return smoothstep(V.threshold * 0.45, V.threshold * 2.2, d);
     };
     float z = height(int2(0));
     if (z <= 0.0) return float4(0);

@@ -80,12 +80,10 @@ struct RainChecks {
         let w = water([front, win])
         precondition(w.catchRain(from: CGPoint(x: 400, y: 90), to: CGPoint(x: 400, y: 110)) != nil, "visible edge catches rain")
         precondition(w.catchRain(from: CGPoint(x: 200, y: 90), to: CGPoint(x: 200, y: 110)) == nil, "covered edge catches nothing")
-        precondition(w.catchRain(from: CGPoint(x: 400, y: 200), to: CGPoint(x: 400, y: 260), on: 1, pane: 0.5)?.y == 250,
-                     "rain crossing the glass strikes it at its pane height")
-        precondition(w.catchRain(from: CGPoint(x: 200, y: 200), to: CGPoint(x: 200, y: 260), on: 1, pane: 0.5) == nil,
-                     "glass covered by a window in front catches nothing")
-        precondition(w.catchRain(from: CGPoint(x: 400, y: 200), to: CGPoint(x: 400, y: 240), on: 1, pane: 0.5) == nil,
-                     "rain that has not yet reached its pane height passes on")
+        precondition(w.catchRain(from: CGPoint(x: 80, y: 200), to: CGPoint(x: 110, y: 220), on: 1) == nil,
+                     "a side covered by a window in front catches nothing")
+        precondition(w.catchRain(from: CGPoint(x: 520, y: 200), to: CGPoint(x: 490, y: 220), on: 1)?.x == 500,
+                     "wind-driven rain strikes a visible side")
 
         let lower = WindowFrame(id: 2, rect: CGRect(x: 100, y: 180, width: 400, height: 200))
         let layered = water([lower, win])

@@ -79,7 +79,7 @@ final class RainController {
                                                 to: CGPoint(x: b.x + origin.x, y: b.y + origin.y), on: id,
                                                 volume: 2 + 6 * drop.near,
                                                 velocity: CGVector(dx: RainEngine.windSpeed(params) * (0.4 + drop.near),
-                                                                   dy: 520 + 900 * drop.near), pane: drop.pane) else { return nil }
+                                                                   dy: 520 + 900 * drop.near)) else { return nil }
                 return CGPoint(x: hit.x - origin.x, y: hit.y - origin.y)
             }, strikes: settings.windowWater ? { d in
                 water.catchInward(at: CGPoint(x: d.target.x + origin.x, y: d.target.y + origin.y), radius: d.radius, velocity: d.drift)
