@@ -56,11 +56,16 @@ struct RainChecks {
     }
 
     static func geometry() {
-        precondition(win.topHit(from: CGPoint(x: 101, y: 90), to: CGPoint(x: 101, y: 110)) == nil, "rounded corner has no flat ledge")
-        let corner = win.topHit(from: CGPoint(x: 101, y: 90), to: CGPoint(x: 101, y: 125))!
+        precondition(win.edgeHit(from: CGPoint(x: 101, y: 90), to: CGPoint(x: 101, y: 110)) == nil, "rounded corner has no flat ledge")
+        let corner = win.edgeHit(from: CGPoint(x: 101, y: 90), to: CGPoint(x: 101, y: 125))!.point
         close(corner.y, win.rect.minY + Glass.inset(1, width: win.rect.width), "rounded impact")
-        let diagonal = win.topHit(from: CGPoint(x: 50, y: 80), to: CGPoint(x: 250, y: 120))!
-        close(diagonal.x, 150, "wind uses swept intersection, not segment endpoint")
+        let diagonal = win.edgeHit(from: CGPoint(x: 50, y: 80), to: CGPoint(x: 250, y: 120))!
+        close(diagonal.point.x, 150, "wind uses swept intersection, not segment endpoint")
+        precondition(diagonal.normal == CGVector(dx: 0, dy: -1), "rain from above meets the top")
+        let side = win.edgeHit(from: CGPoint(x: 80, y: 200), to: CGPoint(x: 120, y: 230))!
+        close(side.point.x, 100, "wind-driven rain meets the side")
+        precondition(side.normal == CGVector(dx: -1, dy: 0), "the side normal points out")
+        precondition(win.edgeHit(from: CGPoint(x: 300, y: 200), to: CGPoint(x: 300, y: 250)) == nil, "rain inside the outline meets nothing")
         let spans = Occlusion.spans(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 0, y: 10),
                                     outside: [CGRect(x: -5, y: 4, width: 10, height: 2), CGRect(x: 1, y: 0, width: 5, height: 10)])
         precondition(spans.count == 2, "a streak splits around the window in front of it")
@@ -143,6 +148,24 @@ struct RainChecks {
         let lead = slid.map { CGFloat($0.x.y) }.max()!
         precondition(lead - large.y > 20, "a large drop slides down")
         precondition(slid.contains { CGFloat($0.x.y) < lead - 15 }, "a sliding drop leaves water behind")
+
+        let screen = WindowWater(source: source, evaporation: 0)
+        screen.screens = [CGRect(x: 0, y: 0, width: 800, height: 600)]
+        screen.step(dt: dt, windows: [win], params: calm); screen.wait()
+        screen.catchInward(at: CGPoint(x: 300, y: 250), radius: 2, velocity: CGVector(dx: 0, dy: 600))
+        screen.catchInward(at: CGPoint(x: 650, y: 250), radius: 2, velocity: CGVector(dx: 0, dy: 600))
+        screen.catchInward(at: CGPoint(x: 900, y: 250), radius: 2, velocity: CGVector(dx: 0, dy: 600))
+        run(screen, frames: 2)
+        let landed = Dictionary(grouping: screen.snapshot(), by: \.window)
+        precondition(landed[1]?.allSatisfy { $0.mode == Particle.face } == true, "inward rain over a window lands on its glass")
+        precondition(landed[Int32(WindowWater.screenGlass(0))]?.isEmpty == false, "inward rain over the desktop lands on the screen glass")
+        precondition(landed.count == 2, "inward rain outside every screen is lost")
+        let slider = WindowWater(source: source, evaporation: 0)
+        slider.screens = [CGRect(x: 0, y: 0, width: 800, height: 600)]
+        slider.step(dt: dt, windows: [], params: calm); slider.wait()
+        slider.spawn(at: CGPoint(x: 650, y: 100), radius: 6, velocity: .zero, window: WindowWater.screenGlass(0), mode: Particle.face)
+        run(slider, frames: 90, windows: [])
+        precondition(slider.snapshot().contains { $0.x.y > 130 }, "large drops slide on the screen glass as on window glass")
 
         let dry = water(evaporation: 0.5)
         dry.spawn(at: CGPoint(x: 200, y: 200), radius: 2, velocity: .zero, window: 1, mode: Particle.face)

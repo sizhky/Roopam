@@ -7,28 +7,38 @@ struct WindowFrame: Equatable {
     var id: Int
     var rect: CGRect   // global, origin top-left
 
-    func topHit(from a: CGPoint, to b: CGPoint) -> CGPoint? {
+    /// First point where segment a→b enters the rounded outline, with the outward normal there.
+    /// Rain moving down meets the top; wind-driven rain can also meet a side.
+    func edgeHit(from a: CGPoint, to b: CGPoint) -> (point: CGPoint, normal: CGVector)? {
         let dx = b.x - a.x, dy = b.y - a.y
-        guard dy > 0 else { return nil }
-        let radius = min(Glass.cornerRadius, rect.width / 2, rect.height / 2)
-        var times: [CGFloat] = []
-        let t = (rect.minY - a.y) / dy
-        let x = a.x + dx * t
-        if t >= 0, t <= 1, x >= rect.minX + radius, x <= rect.maxX - radius { times.append(t) }
-        for side in [-1.0, 1.0] {
-            let cx = side < 0 ? rect.minX + radius : rect.maxX - radius
-            let cy = rect.minY + radius
-            let ox = a.x - cx, oy = a.y - cy
-            let aa = dx * dx + dy * dy, bb = 2 * (ox * dx + oy * dy)
-            let cc = ox * ox + oy * oy - radius * radius
-            let disc = bb * bb - 4 * aa * cc
-            guard disc >= 0 else { continue }
-            let t = (-bb - sqrt(disc)) / (2 * aa)
-            let hx = a.x + dx * t, hy = a.y + dy * t
-            if t >= 0, t <= 1, hy <= cy, (hx - cx) * side >= 0 { times.append(t) }
+        let R = min(Glass.cornerRadius, rect.width / 2, rect.height / 2)
+        var best: (t: CGFloat, point: CGPoint, normal: CGVector)?
+        func consider(_ t: CGFloat, _ n: CGVector) {
+            guard t >= 0, t <= 1, t < (best?.t ?? .infinity) else { return }
+            best = (t, CGPoint(x: a.x + dx * t, y: a.y + dy * t), n)
         }
-        guard let first = times.min() else { return nil }
-        return CGPoint(x: a.x + first * dx, y: a.y + first * dy)
+        let walls: [(CGVector, CGFloat)] = [(CGVector(dx: 0, dy: -1), rect.minY), (CGVector(dx: 0, dy: 1), rect.maxY),
+                                            (CGVector(dx: -1, dy: 0), rect.minX), (CGVector(dx: 1, dy: 0), rect.maxX)]
+        for (n, wall) in walls {
+            let vertical = n.dx != 0
+            let along = vertical ? dx : dy, start = vertical ? a.x : a.y
+            guard along * (vertical ? n.dx : n.dy) < 0 else { continue }
+            let t = (wall - start) / along
+            let cross = vertical ? a.y + dy * t : a.x + dx * t
+            let lo = (vertical ? rect.minY : rect.minX) + R, hi = (vertical ? rect.maxY : rect.maxX) - R
+            if cross >= lo, cross <= hi { consider(t, n) }
+        }
+        for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] as [(CGFloat, CGFloat)] {
+            let c = CGPoint(x: sx < 0 ? rect.minX + R : rect.maxX - R, y: sy < 0 ? rect.minY + R : rect.maxY - R)
+            let ox = a.x - c.x, oy = a.y - c.y
+            let aa = dx * dx + dy * dy, bb = 2 * (ox * dx + oy * dy), cc = ox * ox + oy * oy - R * R
+            let disc = bb * bb - 4 * aa * cc
+            guard aa > 0, disc >= 0 else { continue }
+            let t = (-bb - sqrt(disc)) / (2 * aa)
+            let px = a.x + dx * t - c.x, py = a.y + dy * t - c.y
+            if px * sx >= 0, py * sy >= 0 { consider(t, CGVector(dx: px / R, dy: py / R)) }
+        }
+        return best.map { ($0.point, $0.normal) }
     }
 }
 
@@ -113,7 +123,7 @@ enum Fluid {
     static let bucket = 16
     static var substeps = 8
     static let iterations = 3
-    static let maxWindows = 64
+    static let maxWindows = 56
     static var gravity: Float = 1800
     static var adhesion: Float = 6000
     static var viscosity: Float = 0.08
@@ -121,7 +131,7 @@ enum Fluid {
     static let contactRange: Float = 1.5 * radius
     static var pin: Float = 4000
     static var substrateDrag: Float = 15
-    static let evaporation: Float = 0.02
+    static let evaporation: Float = 0.03
     static let impactRetention: CGFloat = 0.1
     static var scorrK: Float = 0.02
     static var bond: Float = 0.6
@@ -186,6 +196,10 @@ final class WindowWater {
     private var gpuWindows: [FluidWindow] = []
     private var seed: UInt32 = 1
     private(set) var windows: [WindowFrame] = []
+    /// Screen frames, global top-left. Each is a pane of glass in front of every window.
+    var screens: [CGRect] = []
+
+    static func screenGlass(_ index: Int) -> Int { -1000 - index }
     private(set) var time: CGFloat = 0
     let evaporation: Float
     var killY: Float = 100_000
@@ -260,17 +274,17 @@ final class WindowWater {
         return true
     }
 
-    /// Rain with a pane crossing strikes the glass face there; other rain strikes the first window edge it crosses.
+    /// Rain with a pane crossing strikes the glass face there; other rain strikes the first window edge it meets.
     @discardableResult
     func catchRain(from a: CGPoint, to b: CGPoint, on id: Int? = nil, volume: CGFloat = 2,
                    velocity: CGVector = CGVector(dx: 0, dy: 700), pane: CGFloat? = nil) -> CGPoint? {
         if let pane { return catchFace(from: a, to: b, on: id, pane: pane, volume: volume, velocity: velocity) }
-        let hits = windows.compactMap { w -> (WindowFrame, CGPoint)? in
-            guard id == nil || w.id == id, let hit = w.topHit(from: a, to: b),
-                  visible(CGPoint(x: hit.x, y: hit.y + 0.1), on: w.id) else { return nil }
-            return (w, hit)
+        let hits = windows.compactMap { w -> (WindowFrame, CGPoint, CGFloat)? in
+            guard id == nil || w.id == id, let hit = w.edgeHit(from: a, to: b),
+                  visible(CGPoint(x: hit.point.x - hit.normal.dx * 0.1, y: hit.point.y - hit.normal.dy * 0.1), on: w.id) else { return nil }
+            return (w, hit.point, hypot(hit.point.x - a.x, hit.point.y - a.y))
         }
-        guard let hit = hits.min(by: { $0.1.y < $1.1.y }) else { return nil }
+        guard let hit = hits.min(by: { $0.2 < $1.2 }) else { return nil }
         let speed = max(1, hypot(velocity.dx, velocity.dy)), r = cbrt(volume)
         let center = CGPoint(x: hit.1.x - velocity.dx / speed * (r + CGFloat(Fluid.radius)),
                              y: hit.1.y - velocity.dy / speed * (r + CGFloat(Fluid.radius)))
@@ -293,6 +307,25 @@ final class WindowWater {
               velocity: CGVector(dx: wall.dx + (velocity.dx - wall.dx) * k, dy: wall.dy + (velocity.dy - wall.dy) * k),
               window: w.id, mode: Particle.face)
         return hit
+    }
+
+    /// Rain moving toward the viewer lands on the frontmost glass under its impact point:
+    /// an app window's face where one covers the point, otherwise the screen's own glass.
+    func catchInward(at p: CGPoint, radius: CGFloat, velocity: CGVector) {
+        let k = Fluid.impactRetention
+        let v = CGVector(dx: velocity.dx * k, dy: velocity.dy * k)
+        if let w = windows.first(where: { covers($0, p) }) {
+            let wall = velocities[w.id] ?? .zero
+            spawn(at: p, radius: radius, velocity: CGVector(dx: wall.dx + v.dx, dy: wall.dy + v.dy), window: w.id, mode: Particle.face)
+        } else if let s = screens.firstIndex(where: { $0.contains(p) }) {
+            spawn(at: p, radius: radius, velocity: v, window: Self.screenGlass(s), mode: Particle.face)
+        }
+    }
+
+    private func covers(_ w: WindowFrame, _ p: CGPoint) -> Bool {
+        guard w.rect.contains(p) else { return false }
+        let inset = Glass.inset(p.x - w.rect.minX, width: w.rect.width)
+        return p.y >= w.rect.minY + inset && p.y <= w.rect.maxY - inset
     }
 
     /// Queues a drop as a disc of particles at rest spacing; it enters the simulation on the next step.
@@ -350,8 +383,12 @@ final class WindowWater {
                                    size: SIMD2(Float(w.rect.width), Float(w.rect.height)),
                                    velocity: SIMD2(Float(v.dx), Float(v.dy)), id: Int32(w.id), rank: Int32(rank))
             }
-            gpuWindows = ws
-            encodeSubstep(cb, windows: ws, params: parameters(dt: sub, wind: p), first: k == 0)
+            let glass = screens.enumerated().map { i, r in
+                FluidWindow(origin: SIMD2(Float(r.minX), Float(r.minY)), size: SIMD2(Float(r.width), Float(r.height)),
+                            velocity: .zero, id: Int32(Self.screenGlass(i)), rank: -1)
+            }
+            gpuWindows = ws + glass
+            encodeSubstep(cb, windows: gpuWindows, params: parameters(dt: sub, wind: p), first: k == 0)
         }
         pending = cb
     }
@@ -447,6 +484,7 @@ final class WindowWater {
     private func encodeSubstep(_ cb: MTLCommandBuffer, windows ws: [FluidWindow], params P: FluidParams, first: Bool) {
         guard highWater > 0, let e = cb.makeComputeCommandEncoder() else { return }
         var P = P
+        P.windowCount = UInt32(ws.count)
         let windowBytes = max(1, ws.count) * MemoryLayout<FluidWindow>.stride
         var ws = ws.isEmpty ? [FluidWindow(origin: .zero, size: .zero, velocity: .zero, id: -1, rank: 0)] : ws
         func run(_ name: String, _ buffers: [MTLBuffer], windows: Bool = false, threads: Int? = nil) {

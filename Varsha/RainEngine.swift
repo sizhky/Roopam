@@ -20,25 +20,46 @@ struct RainDrop {
     var impacted = false
 }
 
+/// Rain moving toward the viewer. It is seen falling and growing until it meets the glass at `target`.
+struct InwardDrop {
+    var target: CGPoint   // screen-local impact point
+    var life: CGFloat     // seconds from appearing to impact
+    var radius: CGFloat   // drop radius on arrival, points
+    var drift: CGVector   // on-screen velocity while approaching
+    var age: CGFloat = 0
+
+    var progress: CGFloat { min(1, age / life) }
+    var head: CGPoint { CGPoint(x: target.x - drift.dx * (life - age), y: target.y - drift.dy * (life - age)) }
+}
+
 final class RainEngine {
     private(set) var drops: [RainDrop] = []
+    private(set) var inward: [InwardDrop] = []
+    private var inwardDue: CGFloat = 0
     var size: CGSize
 
     init(size: CGSize, drops: [RainDrop] = []) { self.size = size; self.drops = drops }
 
     static func targetCount(area: CGFloat, params p: RainParams) -> Int {
-        let perMegapixel = 40 + 900 * pow(p.intensity, 1.4)
+        let perMegapixel = 40 + 1500 * pow(p.intensity, 1.4)
         return Int(area / 1_000_000 * perMegapixel * p.densityScale)
     }
 
     static func windSpeed(_ p: RainParams) -> CGFloat { p.wind * 320 }
 
     /// Share of rain aimed at a window that crosses its glass instead of its top edge.
-    static let faceShare: CGFloat = 0.3
+    static let faceShare: CGFloat = 0.4
+
+    /// Inward drops per second per megapixel of screen.
+    static func inwardRate(area: CGFloat, params p: RainParams) -> CGFloat {
+        area / 1_000_000 * 45 * pow(p.intensity, 1.2) * p.densityScale
+    }
 
     func step(dt: CGFloat, params p: RainParams, windowIDs: [Int] = [],
-              lands: ((CGPoint, CGPoint, RainDrop) -> CGPoint?)? = nil) {
+              lands: ((CGPoint, CGPoint, RainDrop) -> CGPoint?)? = nil,
+              strikes: ((InwardDrop) -> Void)? = nil) {
         guard dt > 0 else { return }
+        stepInward(dt: dt, params: p, strikes: strikes)
         let target = Self.targetCount(area: size.width * size.height, params: p)
         while drops.count < target { drops.append(spawn(params: p, anywhere: true, windowIDs: windowIDs)) }
         if drops.count > target { drops.removeLast(drops.count - target) }
@@ -61,6 +82,21 @@ final class RainEngine {
             if drops[i].x < -80 { drops[i].x += size.width + 160 }
             if drops[i].x > size.width + 80 { drops[i].x -= size.width + 160 }
         }
+    }
+
+    private func stepInward(dt: CGFloat, params p: RainParams, strikes: ((InwardDrop) -> Void)?) {
+        inwardDue += Self.inwardRate(area: size.width * size.height, params: p) * dt
+        while inwardDue >= 1 {
+            inwardDue -= 1
+            let u = CGFloat.random(in: 0...1)
+            let fall = CGFloat.random(in: 450...900)
+            inward.append(InwardDrop(target: CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height)),
+                                     life: .random(in: 0.08...0.18), radius: 1.3 + 2.4 * u * u,
+                                     drift: CGVector(dx: Self.windSpeed(p) * 0.8, dy: fall)))
+        }
+        for i in inward.indices { inward[i].age += dt }
+        for d in inward where d.age >= d.life { strikes?(d) }
+        inward.removeAll { $0.age >= $0.life }
     }
 
     static func length(of drop: RainDrop, params p: RainParams) -> CGFloat {

@@ -67,6 +67,7 @@ final class RainController {
         let params = RainParams(intensity: settings.intensity, wind: settings.wind,
                                 depth: settings.depth, densityScale: densityScale)
         if settings.windowWater { windows = WindowTracker.frames() }
+        water.screens = settings.windowWater ? overlays.map { CGRect(origin: $0.backView.screenOrigin, size: $0.engine.size) } : []
         water.step(dt: dt, windows: settings.windowWater ? windows : [], params: params)
         for o in overlays {
             let origin = o.backView.screenOrigin
@@ -80,7 +81,9 @@ final class RainController {
                                                 velocity: CGVector(dx: RainEngine.windSpeed(params) * (0.4 + drop.near),
                                                                    dy: 520 + 900 * drop.near), pane: drop.pane) else { return nil }
                 return CGPoint(x: hit.x - origin.x, y: hit.y - origin.y)
-            })
+            }, strikes: settings.windowWater ? { d in
+                water.catchInward(at: CGPoint(x: d.target.x + origin.x, y: d.target.y + origin.y), radius: d.radius, velocity: d.drift)
+            } : nil)
             for v in [o.backView, o.frontView] {
                 v.params = params
                 v.drawFront = settings.frontParticles

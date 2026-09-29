@@ -105,11 +105,43 @@ final class RainView: NSView {
         }
         for bucket in 0..<3 {
             let alpha = 0.1 + 0.1 * CGFloat(bucket) + (foreground ? 0.04 : 0)
-            ctx.setLineWidth(0.45 + 0.35 * CGFloat(bucket))
+            let width = 0.45 + 0.35 * CGFloat(bucket)
             for (segment, fade) in [0.2, 0.55, 1].enumerated() {
+                let path = paths[bucket * 3 + segment]
+                shade(ctx, path, width: width, alpha: alpha * fade)
+                ctx.setLineWidth(width)
                 ctx.setStrokeColor(CGColor(red: 0.88, green: 0.94, blue: 1, alpha: alpha * fade))
-                ctx.addPath(paths[bucket * 3 + segment]); ctx.strokePath()
+                ctx.addPath(path); ctx.strokePath()
             }
+        }
+        if foreground { drawInward(ctx) }
+    }
+
+    /// Dark offset under-stroke, so rain reads on light backgrounds as it does on dark ones.
+    private func shade(_ ctx: CGContext, _ path: CGPath, width: CGFloat, alpha: CGFloat) {
+        ctx.saveGState()
+        ctx.translateBy(x: 0.6, y: 0.8)
+        ctx.setLineWidth(width + 0.5)
+        ctx.setStrokeColor(CGColor(red: 0.05, green: 0.08, blue: 0.12, alpha: alpha * 0.6))
+        ctx.addPath(path); ctx.strokePath()
+        ctx.restoreGState()
+    }
+
+    /// Rain approaching the glass: a short falling streak that widens and brightens as it nears impact.
+    private func drawInward(_ ctx: CGContext) {
+        for d in engine.inward {
+            let t = d.progress, speed = max(1, hypot(d.drift.dx, d.drift.dy))
+            let head = d.head, len = (6 + 10 * t) * min(1, speed / 600)
+            let tail = CGPoint(x: head.x - d.drift.dx / speed * len, y: head.y - d.drift.dy / speed * len)
+            let path = CGMutablePath()
+            path.move(to: tail); path.addLine(to: head)
+            let width = d.radius * (0.25 + 0.45 * t), alpha = 0.1 + 0.4 * t
+            shade(ctx, path, width: width, alpha: alpha)
+            ctx.setLineCap(.round)
+            ctx.setLineWidth(width)
+            ctx.setStrokeColor(CGColor(red: 0.9, green: 0.95, blue: 1, alpha: alpha))
+            ctx.addPath(path); ctx.strokePath()
+            ctx.setLineCap(.butt)
         }
     }
 }

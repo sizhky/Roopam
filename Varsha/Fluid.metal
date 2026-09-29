@@ -344,12 +344,13 @@ vertex SplatOut splatVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     return o;
 }
 
-/// Water of window k is hidden wherever a window in front of k covers it.
+/// Water of window k is hidden wherever a window in front of k covers it. Screen glass has rank -1:
+/// nothing covers it, and it covers nothing.
 fragment float splatFragment(SplatOut in [[stage_in]], constant View &V [[buffer(0)]], constant Window *ws [[buffer(1)]]) {
     float r2 = dot(in.uv, in.uv);
     if (r2 >= 1.0) discard_fragment();
     for (uint k = 0; k < V.windowCount; k++) {
-        if (ws[k].rank < in.rank && roundedBox(in.world, ws[k], V.corner) < 0.0) discard_fragment();
+        if (ws[k].rank >= 0 && ws[k].rank < in.rank && roundedBox(in.world, ws[k], V.corner) < 0.0) discard_fragment();
     }
     float w = 1.0 - r2;
     return w * w * w;
