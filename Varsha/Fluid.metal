@@ -16,6 +16,8 @@ struct Params {
     float airDrag;
     float contactRange;
     float pin;
+    float edgePin;
+    float edgeDrag;
     float substrateDrag;
     float evaporation;
     float corner;
@@ -264,12 +266,12 @@ kernel void finish(device Particle *ps [[buffer(0)]], device const float *surfac
         Window w = ws[wi];
         float2 local = q.p - w.origin;
         float defect = valueNoise(local / 2.5 + 17.0, w.id + 7);
-        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 1.5 * pow(defect, 6.0);
+        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 3.0 * pow(defect, 6.0);
         float2 slip = (q.p - q.x) - w.velocity * P.dt;
         float2 normal = dot(slip, n) * n, tangent = slip - normal;
-        float hold = P.pin * s * energy * P.dt * P.dt, l = length(tangent);
+        float hold = (q.mode == SIDE ? P.edgePin : P.pin) * s * energy * P.dt * P.dt, l = length(tangent);
         tangent = l <= hold ? float2(0) : tangent * (1.0 - hold / l);
-        q.p = q.x + w.velocity * P.dt + normal + tangent * exp(-P.substrateDrag * P.dt);
+        q.p = q.x + w.velocity * P.dt + normal + tangent * exp(-(q.mode == SIDE ? P.edgeDrag : P.substrateDrag) * P.dt);
     }
     q.v = (q.p - q.x) / P.dt;
     q.x = q.p;

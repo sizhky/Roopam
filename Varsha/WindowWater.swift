@@ -76,6 +76,8 @@ struct FluidParams {
     var airDrag: Float
     var contactRange: Float
     var pin: Float
+    var edgePin: Float
+    var edgeDrag: Float
     var substrateDrag: Float
     var evaporation: Float
     var corner: Float
@@ -130,7 +132,9 @@ enum Fluid {
     static var viscosity: Float = 0.08
     static var airDrag: Float = 1.8
     static let contactRange: Float = 1.5 * radius
-    static var pin: Float = 2500
+    static var pin: Float = 2500      // glass pane face
+    static var edgePin: Float = 4000  // window frame edge
+    static var edgeDrag: Float = 15
     static var substrateDrag: Float = 8
     static let evaporation: Float = 0.03
     static let impactRetention: CGFloat = 0.1
@@ -462,7 +466,7 @@ final class WindowWater {
                            h: Fluid.h, rho0: Fluid.rho0, radius: Fluid.radius,
                            adhesion: Fluid.adhesion, viscosity: Fluid.viscosity, airDrag: Fluid.airDrag,
                            contactRange: Fluid.contactRange,
-                           pin: Fluid.pin, substrateDrag: Fluid.substrateDrag, evaporation: evaporation,
+                           pin: Fluid.pin, edgePin: Fluid.edgePin, edgeDrag: Fluid.edgeDrag, substrateDrag: Fluid.substrateDrag, evaporation: evaporation,
                            corner: Float(Glass.cornerRadius), scorrK: Fluid.scorrK,
                            scorrW: Fluid.poly6(pow(0.2 * Fluid.h, 2)), bond: Fluid.bond, bondRest: Fluid.bondRest,
                            sleepSpeed: Fluid.sleepSpeed, sleepTime: Fluid.sleepTime,

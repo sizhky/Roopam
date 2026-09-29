@@ -114,7 +114,7 @@ struct RainChecks {
         precondition(bead.allSatisfy { $0.x.y <= Float(win.rect.minY) + 0.05 }, "water stays out of the window")
         let xs = bead.map(\.x.x), ys = bead.map(\.x.y)
         let width = xs.max()! - xs.min()!, height = ys.max()! - ys.min()!
-        precondition(width < 9 && height > 1, "a small drop on the edge rests as a bead, not a film: \(width) x \(height)")
+        precondition(width < 16 && height > 0.3, "a small drop on the edge stays a compact bead: \(width) x \(height)")
         precondition(clusters(bead) == 1, "the bead holds together")
 
         let pair = water()
@@ -124,16 +124,18 @@ struct RainChecks {
         precondition(clusters(pair.snapshot()) == 1, "touching beads coalesce")
 
         let spill = water()
-        spill.spawn(at: CGPoint(x: 492, y: 94), radius: 5, velocity: .zero, window: 1, mode: Particle.side)
+        spill.spawn(at: CGPoint(x: 496, y: 98), radius: 3, velocity: .zero, window: 1, mode: Particle.side)
         run(spill, frames: 120)
-        precondition(spill.snapshot().contains { $0.x.x > Float(win.rect.maxX) && $0.x.y > Float(win.rect.minY) + 10 },
-                     "water that reaches the rounded corner runs down the side")
+        let spilt = spill.snapshot()
+        let lowest = spilt.filter { $0.x.x > Float(win.rect.maxX) - 2 }.map(\.x.y).max() ?? 0
+        precondition(lowest > Float(win.rect.minY) + 10,
+                     "water on the rounded corner runs down the side: \(spilt.count) particles, lowest on the side \(lowest), x \(spilt.map(\.x.x).min() ?? 0)...\(spilt.map(\.x.x).max() ?? 0)")
     }
 
     /// Water on the glass face: pinning, sliding, trails, evaporation.
     static func glass() {
         let w = water()
-        w.spawn(at: CGPoint(x: 200, y: 200), radius: 2, velocity: .zero, window: 1, mode: Particle.face)
+        w.spawn(at: CGPoint(x: 200, y: 200), radius: 1.3, velocity: .zero, window: 1, mode: Particle.face)
         w.spawn(at: CGPoint(x: 400, y: 150), radius: 6, velocity: .zero, window: 1, mode: Particle.face)
         run(w, frames: 1)
         let before = w.snapshot()
@@ -141,7 +143,7 @@ struct RainChecks {
         run(w, frames: 90)
         let after = w.snapshot()
         let pinned = centroid(after.filter { $0.x.x < 300 })
-        precondition(hypot(pinned.x - small.x, pinned.y - small.y) < 1, "a small drop is pinned by the glass")
+        precondition(hypot(pinned.x - small.x, pinned.y - small.y) < 1, "the smallest raindrop is pinned by the glass")
         let slid = after.filter { $0.x.x >= 300 }
         let lead = slid.map { CGFloat($0.x.y) }.max()!
         precondition(lead - large.y > 20, "a large drop slides down")

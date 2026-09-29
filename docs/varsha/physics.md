@@ -36,10 +36,10 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
 
 ## Rain sources
 
-- Falling streaks aimed at a window: 90% cross its glass at a random height (`RainEngine.faceShare`), 10% meet its outline.
-  `WindowFrame.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
-  A real top edge is a few millimetres deep, so it receives a small share of the rain.
-- Inward rain (`InwardDrop`): drops moving toward the viewer, 45 per second per megapixel at full intensity.
+- Falling streaks: 35% of background streaks are aimed at a window (`RainEngine.aimedShare`). They strike its outline and splash there.
+  `WindowWater.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
+  Falling streaks never land on glass mid-fall; a drop that appeared there looked as if it came from nowhere.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity. It is the only source of water on glass.
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
@@ -56,13 +56,15 @@ Streaks have a dark offset under-stroke so they stay visible on light background
 | Air drag | Linear toward wind velocity, weighted by exposure | |
 | Contact-line pinning | Tangential slip held up to `pin * exposure * surface energy`, then viscous damping | Contact-angle hysteresis (Furmidge) |
 
+Spray droplets of one to three particles render at a lowered field threshold, so impacts on edges show their splash.
+
 Exposure is the offset of a particle's neighbourhood centroid.
 It is near 0 in the bulk and near 1 at a free surface.
 On the edge, the solid is filled with fixed ghost lattice points for exposure only.
 So only the water-air boundary and the contact line count as exposed.
 
 Because pinning scales with exposed particles (perimeter) and gravity with all particles (area), small drops stay and large drops slide.
-Surface energy is smooth value noise plus sparse strong defects.
+Surface energy is smooth value noise plus sparse strong defects (weight 3). At weight 1.5 sliding drops left no trail.
 Defects snag the back of a sliding drop, which leaves droplets behind it as a trail.
 
 ## Constants
@@ -75,8 +77,9 @@ Units are points and seconds. Particles have unit mass.
 | gravity | 1800 | With this cohesion, caps are about 3:1 wide to tall, like water on clean glass |
 | bond, bondRest | 0.6, 1.8 spacing | A rest distance at the lattice spacing fights the second lattice ring and makes resting water jitter at 20 to 30 pt/s |
 | adhesion | 6000 | Higher values spread drops into a single layer |
-| pin | 4000 | Face drops below radius about 3.5 pt stay; larger ones slide |
-| substrateDrag | 15 | Sliding drops move at 10 to 50 pt/s |
+| pin | 2500 | Glass pane. Raindrop-sized drops stay; drops from radius about 2 pt slide |
+| substrateDrag | 8 | Glass pane. Low friction, so merged drops trickle |
+| edgePin, edgeDrag | 4000, 15 | Window frame edge, a different material. With pane values, water wicks along the top instead of running off the corner |
 | evaporation | 0.03 per s per exposed particle | Faster than real drying in rain, chosen for the frame budget |
 
 ## Rejected approaches
@@ -94,7 +97,8 @@ Moving water keeps the base rate. So arriving rain always enters the fluid, and 
 
 ## Performance
 
-Measured on the development Mac (Mac16,7): two large windows plus the screen glass, 120 s of rain:
+Measured on the development Mac (Mac16,7): two large windows plus the screen glass, 120 s of rain.
+Measured before the move of all glass water to inward rain; not measured since:
 
 | Intensity | Particles | GPU per frame | Sliding particles |
 |---|---|---|---|
