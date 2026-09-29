@@ -3,7 +3,7 @@ import Combine
 
 /// Owns the overlay windows (one behind and one in front of app windows, per screen),
 /// the simulation state, and the frame timer.
-final class RainController {
+final class RainController: NSObject {
     static let shared = RainController()
 
     private struct ScreenOverlay {
@@ -15,7 +15,8 @@ final class RainController {
     private let settings = Settings.shared
     private let water = WindowWater(source: WindowWater.bundledSource())
     private var overlays: [ScreenOverlay] = []
-    private var timer: Timer?
+    private var link: CADisplayLink?
+    private var linkInterval: TimeInterval = 0
     private var windows: [WindowFrame] = []
     private var last = CACurrentMediaTime()
     private var bag = Set<AnyCancellable>()
@@ -32,9 +33,9 @@ final class RainController {
     }
 
     private func applySettings() {
-        if settings.raining, timer == nil { startTimer() }
-        if !settings.raining { timer?.invalidate(); timer = nil; hideAll() } else { showAll() }
-        if timer != nil, abs((timer?.timeInterval ?? 0) - frameInterval) > 0.001 { timer?.invalidate(); startTimer() }
+        if settings.raining, link == nil { startTimer() }
+        if !settings.raining { stopTimer(); hideAll() } else { showAll() }
+        if link != nil, abs(linkInterval - frameInterval) > 0.001 { stopTimer(); startTimer() }
         applyBackdrops()
     }
 
@@ -69,15 +70,23 @@ final class RainController {
         }
     }
 
+    /// Frames follow the display refresh; each step advances to the time the frame will be shown.
     private func startTimer() {
+        guard let view = overlays.first?.frontView else { return }
         last = CACurrentMediaTime()
-        let t = Timer(timeInterval: frameInterval, repeats: true) { [weak self] _ in self?.frame() }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        linkInterval = frameInterval
+        let fps = Float(1 / frameInterval)
+        let l = view.displayLink(target: self, selector: #selector(tick))
+        l.preferredFrameRateRange = CAFrameRateRange(minimum: fps / 2, maximum: fps, preferred: fps)
+        l.add(to: .main, forMode: .common)
+        link = l
     }
 
-    private func frame() {
-        let now = CACurrentMediaTime()
+    private func stopTimer() { link?.invalidate(); link = nil }
+
+    @objc private func tick(_ l: CADisplayLink) { frame(now: l.targetTimestamp) }
+
+    private func frame(now: CFTimeInterval) {
         let dt = CGFloat(min(0.05, now - last)); last = now
         let params = RainParams(intensity: settings.intensity, wind: settings.wind,
                                 depth: settings.depth, densityScale: densityScale)
@@ -130,6 +139,7 @@ final class RainController {
             return ScreenOverlay(engine: engine, back: back, front: front, backView: bv, frontView: fv)
         }
         if settings.raining { showAll() }
+        if link != nil { stopTimer(); startTimer() }   // the link belongs to the old front view
         backdrops.forEach { $0?.stop() }
         backdrops = []
         applyBackdrops()

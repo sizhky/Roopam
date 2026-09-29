@@ -46,7 +46,7 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
-Streaks have a dark offset under-stroke so they stay visible on light backgrounds.
+Streaks and inward rain render at 1x with a centred dark rim, as the drop composite darkens a bead's edge. The rim keeps rain visible on light backgrounds. Streaks fade from tail to head in five steps. Nearness sets four streak tiers: far streaks are thin, short and dim; the nearest are 3 pt wide, up to 108 pt long and faint, as out-of-focus rain close to the camera is. Front-layer nearness is 0.6 + 0.4u³, so close streaks are rare. Inward rain has a clear body and an upper-left glint, so it matches the bead it becomes on impact.
 
 ## Forces and constraints
 
@@ -113,6 +113,8 @@ Three measures keep this cost down:
 - Sleeping (deactivation): water still for 0.5 s is skipped until moving water or its window disturbs it.
 - A cell sort every 30 frames keeps neighbour reads close in memory. It gave a 2.2× speedup.
 - The frame step never blocks the main thread. It skips a frame if the GPU is still busy.
+- A display link drives frames, and each step advances to the frame's target time. A `Timer` is not aligned to the display refresh, so its frames land unevenly.
+- Rain streaks render at 1x. Rendering at 2x copied four times the pixels on the CPU each frame.
 
 The Energy Saver quality runs at 30 fps, which halves the cost.
 

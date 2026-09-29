@@ -105,14 +105,14 @@ final class RainEngine {
     }
 
     static func length(of drop: RainDrop, params p: RainParams) -> CGFloat {
-        (8 + 34 * drop.near) * (0.6 + 0.6 * p.intensity) * drop.seed
+        (8 + 30 * drop.near + 70 * pow(drop.near, 4)) * (0.6 + 0.6 * p.intensity) * drop.seed
     }
 
     private func spawn(params p: RainParams, anywhere: Bool, windowIDs: [Int]) -> RainDrop {
         let frontShare = 0.04 + 0.32 * p.depth
         let front = CGFloat.random(in: 0...1) < frontShare
         let flat = 1 - p.depth * 0.7
-        let near = front ? CGFloat.random(in: 0.6...1) : CGFloat.random(in: 0...0.6) * flat + 0.2 * (1 - flat)
+        let near = front ? 0.6 + 0.4 * pow(CGFloat.random(in: 0...1), 3) : CGFloat.random(in: 0...0.6) * flat + 0.2 * (1 - flat)
         let window = !front && CGFloat.random(in: 0...1) < Self.aimedShare ? windowIDs.randomElement() : nil
         var drop = RainDrop(x: .random(in: -80...(size.width + 80)),
                             y: anywhere ? .random(in: 0...size.height) : .random(in: -120...(-10)),
