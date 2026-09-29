@@ -47,3 +47,4 @@ build-local/
 # Local tool state
 .sesskey
 .vyasa-storage/
+build-varsha/

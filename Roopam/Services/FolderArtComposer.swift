@@ -43,7 +43,7 @@ enum FolderArtComposer {
     ///     back flap  <- art × back-flap shading
     ///     paper sheet (unchanged)
     ///     front flap <- art × front-flap shading
-    static func icon(with art: NSImage, placement: FolderArtPlacement = FolderArtPlacement(), size: Int = 1024) -> NSImage {
+    static func icon(with art: NSImage, backgroundColor: NSColor? = nil, placement: FolderArtPlacement = FolderArtPlacement(), size: Int = 1024) -> NSImage {
         guard art.isValid, art.size.width > 0, art.size.height > 0,
               let layers, let unitBox = folderBox else { return art }
         let back = layers[0], paper = layers[1], front = layers[2]
@@ -57,6 +57,10 @@ enum FolderArtComposer {
         let width = art.size.width * scale, height = art.size.height * scale
         let center = NSPoint(x: box.midX + placement.offset.width * box.width, y: box.midY + placement.offset.height * box.height)
         let painted = bitmap(size) {
+            if let backgroundColor {
+                backgroundColor.withAlphaComponent(1).setFill()
+                NSRect(x: 0, y: 0, width: size, height: size).fill()
+            }
             art.draw(in: NSRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height))
         }
         shade(backRep, with: painted, reference: reference, size: size)

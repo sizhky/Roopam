@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/Roopam"
-OUT="$ROOT/build-local"
+OUT="${BUILD_OUTPUT_DIR:-$ROOT/build-local}"
 APP="$OUT/Roopam.app"
 SDK="$(xcrun --show-sdk-path)"
 ARCH="$(uname -m)"
@@ -22,7 +22,7 @@ xcrun swiftc -sdk "$SDK" -target "$TARGET" -module-name SBFAdvHost \
 xcrun swiftc -sdk "$SDK" -target "$TARGET" -module-name SBFAdvSync \
     -framework FinderSync -framework Cocoa -Xlinker -e -Xlinker _NSExtensionMain \
     "$SRC/FinderSyncTemplate/FinderSyncExt.swift" -o "$APP/Contents/Resources/FinderSyncTemplate/appex-bin"
-cp "$SRC/Resources/AppIcon.icns" "$SRC/Resources/HelperIcon.icns" "$APP/Contents/Resources/"
+cp -X "$SRC/Resources/AppIcon.icns" "$SRC/Resources/HelperIcon.icns" "$APP/Contents/Resources/"
 python3 - "$SRC/Info.plist" "$APP/Contents/Info.plist" <<'PY'
 import plistlib, sys
 with open(sys.argv[1], 'rb') as f: info = plistlib.load(f)

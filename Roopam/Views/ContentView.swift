@@ -303,9 +303,11 @@ struct ContentView: View {
         PillPicker(selection: $folderTab, options: ["image", "color", "symbol"])
         switch folderTab {
         case "image":
+            ColorPicker("Folder color", selection: $folderColor, supportsOpacity: false)
+                .disabled(importedImage != nil && importedIsIcon)
             HStack(spacing: 12) {
                 Button("Import Image…", action: importArtwork)
-                Text(importedImage == nil ? "PNG, JPEG or TIFF. It is painted onto the folder." : "Drag the preview to move the image.")
+                Text(importedImage == nil ? "Choose a color, then import PNG, JPEG or TIFF. Transparent areas show the folder color." : "Drag the preview to move the image.")
                     .font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
             }
             if let importedImage, !importedIsIcon { zoomControls(importedImage) }
@@ -593,7 +595,7 @@ struct ContentView: View {
 
     private func renderedMainIcon(size: Int = 1024) -> NSImage {
         if let importedImage {
-            return importedIsIcon ? importedImage : FolderArtComposer.icon(with: importedImage, placement: artPlacement, size: size)
+            return importedIsIcon ? importedImage : FolderArtComposer.icon(with: importedImage, backgroundColor: NSColor(folderColor), placement: artPlacement, size: size)
         }
         let color = NSColor(folderColor)
         return NSImage(size: NSSize(width: 512, height: 512), flipped: false) { _ in
