@@ -98,6 +98,19 @@ struct RainChecks {
         close(engine.drops[0].y, 100, "rendered head reaches physical impact")
         engine.step(dt: dt, params: calm, windowIDs: [1])
         precondition(!engine.drops[0].impacted && engine.drops[0].y < 100, "impacted rain respawns next frame")
+        let windy = RainParams(intensity: 1, wind: 1)
+        let gale = water([win])
+        let aimed = RainEngine(size: CGSize(width: 800, height: 600))
+        aimed.targets = [1: win.rect]
+        var sides = 0, tops = 0
+        for _ in 0..<120 {
+            aimed.step(dt: dt, params: windy, windowIDs: [1]) { a, b, d in
+                guard let hit = gale.catchRain(from: a, to: b, on: d.window) else { return nil }
+                if hit.x == win.rect.minX { sides += 1 } else if hit.y == win.rect.minY { tops += 1 }
+                return hit
+            }
+        }
+        precondition(sides > 0 && tops > sides, "angled rain strikes the windward side as well as the top: \(sides) sides, \(tops) tops")
         run(contact, frames: 1, windows: [target])
         precondition(!contact.snapshot().isEmpty, "a caught drop enters the fluid")
     }

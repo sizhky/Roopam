@@ -37,9 +37,12 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
 ## Rain sources
 
 - Falling streaks: 35% of background streaks are aimed at a window (`RainEngine.aimedShare`). They strike its outline and splash there.
+  An aimed streak starts on the straight path to a point on the outline. The top gets a share in proportion to its width,
+  and the windward side in proportion to its height times the slant of the fall, which is the rain flux on each face.
+  Wind reaches 600 pt/s, which slants the fastest streaks to about 25° and the slowest to about 30°.
   `WindowWater.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
   Falling streaks never land on glass mid-fall; a drop that appeared there looked as if it came from nowhere.
-- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity. It is the only source of water on glass.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 1.5 to 4.5 pt. It is the only source of water on glass.
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
@@ -64,7 +67,7 @@ On the edge, the solid is filled with fixed ghost lattice points for exposure on
 So only the water-air boundary and the contact line count as exposed.
 
 Because pinning scales with exposed particles (perimeter) and gravity with all particles (area), small drops stay and large drops slide.
-Surface energy is smooth value noise plus sparse strong defects (weight 3). At weight 1.5 sliding drops left no trail.
+Surface energy is smooth value noise plus sparse strong defects (weight 4). At weight 1.5 sliding drops left no trail.
 Defects snag the back of a sliding drop, which leaves droplets behind it as a trail.
 
 ## Constants

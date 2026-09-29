@@ -72,7 +72,9 @@ final class RainController {
         for o in overlays {
             let origin = o.backView.screenOrigin
             let water = self.water
-            let ids = settings.windowWater ? windows.filter { $0.rect.intersects(CGRect(origin: origin, size: o.engine.size)) }.map(\.id) : []
+            let visible = settings.windowWater ? windows.filter { $0.rect.intersects(CGRect(origin: origin, size: o.engine.size)) } : []
+            let ids = visible.map(\.id)
+            o.engine.targets = Dictionary(visible.map { ($0.id, $0.rect.offsetBy(dx: -origin.x, dy: -origin.y)) }, uniquingKeysWith: { a, _ in a })
             o.engine.step(dt: dt, params: params, windowIDs: ids, lands: { a, b, drop in
                 guard let id = drop.window,
                       let hit = water.catchRain(from: CGPoint(x: a.x + origin.x, y: a.y + origin.y),

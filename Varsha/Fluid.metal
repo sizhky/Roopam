@@ -266,7 +266,7 @@ kernel void finish(device Particle *ps [[buffer(0)]], device const float *surfac
         Window w = ws[wi];
         float2 local = q.p - w.origin;
         float defect = valueNoise(local / 2.5 + 17.0, w.id + 7);
-        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 3.0 * pow(defect, 6.0);
+        float energy = 0.6 + 0.8 * valueNoise(local / 10.0, w.id) + 4.0 * pow(defect, 6.0);
         float2 slip = (q.p - q.x) - w.velocity * P.dt;
         float2 normal = dot(slip, n) * n, tangent = slip - normal;
         float hold = (q.mode == SIDE ? P.edgePin : P.pin) * s * energy * P.dt * P.dt, l = length(tangent);

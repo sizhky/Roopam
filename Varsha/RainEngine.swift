@@ -44,7 +44,7 @@ final class RainEngine {
         return Int(area / 1_000_000 * perMegapixel * p.densityScale)
     }
 
-    static func windSpeed(_ p: RainParams) -> CGFloat { p.wind * 320 }
+    static func windSpeed(_ p: RainParams) -> CGFloat { p.wind * 600 }
 
     /// Share of background rain aimed at a window's outline; the rest falls behind every window.
     static let aimedShare: CGFloat = 0.35
@@ -53,6 +53,9 @@ final class RainEngine {
     static func inwardRate(area: CGFloat, params p: RainParams) -> CGFloat {
         area / 1_000_000 * 90 * pow(p.intensity, 1.2) * p.densityScale
     }
+
+    /// Screen-local outlines of the windows rain can be aimed at, by window id.
+    var targets: [Int: CGRect] = [:]
 
     func step(dt: CGFloat, params p: RainParams, windowIDs: [Int] = [],
               lands: ((CGPoint, CGPoint, RainDrop) -> CGPoint?)? = nil,
@@ -90,7 +93,7 @@ final class RainEngine {
             let u = CGFloat.random(in: 0...1)
             let fall = CGFloat.random(in: 450...900)
             inward.append(InwardDrop(target: CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height)),
-                                     life: .random(in: 0.08...0.18), radius: 1.3 + 2.4 * u * u,
+                                     life: .random(in: 0.08...0.18), radius: 1.5 + 3.0 * u * u,
                                      drift: CGVector(dx: Self.windSpeed(p) * 0.8, dy: fall)))
         }
         for i in inward.indices { inward[i].age += dt }
@@ -108,9 +111,25 @@ final class RainEngine {
         let flat = 1 - p.depth * 0.7
         let near = front ? CGFloat.random(in: 0.6...1) : CGFloat.random(in: 0...0.6) * flat + 0.2 * (1 - flat)
         let window = !front && CGFloat.random(in: 0...1) < Self.aimedShare ? windowIDs.randomElement() : nil
-        return RainDrop(x: .random(in: -80...(size.width + 80)),
-                        y: anywhere ? .random(in: 0...size.height) : .random(in: -120...(-10)),
-                        near: near, front: front, window: window)
+        var drop = RainDrop(x: .random(in: -80...(size.width + 80)),
+                            y: anywhere ? .random(in: 0...size.height) : .random(in: -120...(-10)),
+                            near: near, front: front, window: window)
+        if !anywhere, let id = window, let rect = targets[id] { aim(&drop, at: rect, params: p) }
+        return drop
+    }
+
+    /// Starts an aimed drop on the straight path that meets its window's outline. Rain meets the top in
+    /// proportion to its width and the windward side in proportion to height times the slant of the fall.
+    private func aim(_ d: inout RainDrop, at r: CGRect, params p: RainParams) {
+        let slope = Self.windSpeed(p) * (0.4 + d.near) / (520 + 900 * d.near)
+        let corner = min(Glass.cornerRadius, r.width / 2, r.height / 2), side = (r.height - 2 * corner) * abs(slope)
+        let target: CGPoint
+        if CGFloat.random(in: 0...(r.width + side)) < side {
+            target = CGPoint(x: slope > 0 ? r.minX : r.maxX, y: .random(in: (r.minY + corner)...(r.maxY - corner)))
+        } else {
+            target = CGPoint(x: .random(in: r.minX...r.maxX), y: r.minY)
+        }
+        d.x = target.x - slope * (target.y - d.y)
     }
 }
 
