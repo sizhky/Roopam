@@ -37,6 +37,7 @@ struct Params {
     uint seed;
 };
 struct View { float2 origin; float2 size; float radius; float corner; uint windowCount; float threshold; };
+struct Lens { float depth; float eta; };
 
 constant int DEAD = 0;
 constant int SIDE = 1;
@@ -370,7 +371,10 @@ vertex FullOut fullscreen(uint vid [[vertex_id]]) {
 
 /// Treats the saturated field as the height of a clear lens over the background: the steep rim refracts the
 /// dark surroundings, the top-left slope reflects a highlight, and light focused through the drop brightens the far side.
-fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[texture(0)]], constant View &V [[buffer(0)]]) {
+/// With a backdrop, a view ray refracts at the water surface (Snell) and reads the pixel it reaches on the glass.
+fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[texture(0)]],
+                          texture2d<float> backdrop [[texture(1)]], constant View &V [[buffer(0)]],
+                          constant Lens &lens [[buffer(1)]]) {
     int2 c = int2(in.position.xy);
     int2 last = int2(field.get_width() - 1, field.get_height() - 1);
     auto height = [&](int2 o) {
@@ -380,7 +384,7 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
     float z = height(int2(0));
     if (z <= 0.0) return float4(0);
     float dx = 0.0, dy = 0.0;
-    for (int k = 1; k <= 2; k++) {
+    for (int k = 1; k <= 3; k++) {
         dx += (height(int2(k, 0)) - height(int2(-k, 0))) / float(k);
         dy += (height(int2(0, k)) - height(int2(0, -k))) / float(k);
     }
@@ -393,6 +397,14 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
     float edge = smoothstep(0.05, 0.5, slope);
     float focus = max(0.0, dot(normalize(n.xy + 1e-6), -L.xy)) * smoothstep(0.02, 0.25, slope) * (1.0 - edge * 0.6) * 0.5;
     float light = min(1.0, spec + focus);
+    if (lens.depth > 0.0) {
+        constexpr sampler s(filter::linear, address::clamp_to_edge);
+        float3 t = refract(float3(0, 0, -1), n, lens.eta);
+        float2 hit = in.position.xy + t.xy / max(-t.z, 0.2) * z * lens.depth;
+        float3 behind = backdrop.sample(s, hit / float2(field.get_width(), field.get_height())).rgb;
+        float3 water = behind * float3(0.97, 0.985, 1.0) * (1.0 - 0.2 * edge);
+        return float4(cover * mix(water, float3(1.0), spec), cover);
+    }
     float dark = cover * 0.32 * edge;
     float body = cover * 0.03;
     float alpha = min(1.0, light * cover + (dark + body) * (1.0 - light));

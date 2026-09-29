@@ -11,6 +11,7 @@ final class RainView: NSView {
     unowned let water: WindowWater
     var params = RainParams()
     var drawFront = true
+    var backdrop: Backdrop?
     private let rain = CALayer()
     private let waterLayer = CAMetalLayer()
     private var rainContext: CGContext?
@@ -54,7 +55,7 @@ final class RainView: NSView {
     /// Rain renders at 1x into a sublayer the GPU scales; window water renders on the GPU at Retina scale.
     func refresh() {
         renderRain()
-        if layer_ == .front { water.render(into: waterLayer, origin: screenOrigin, size: bounds.size) }
+        if layer_ == .front { water.render(into: waterLayer, origin: screenOrigin, size: bounds.size, backdrop: backdrop?.texture) }
     }
 
     func renderRain() {

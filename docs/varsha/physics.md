@@ -116,7 +116,19 @@ Three measures keep this cost down:
 
 The Energy Saver quality runs at 30 fps, which halves the cost.
 
+## Rendering
+
+The splat pass sums particle kernels into a field. The composite pass treats the field as the water height over the glass.
+
+Refraction is off by default. When it is on, a ScreenCaptureKit stream copies each display without Varsha's own windows. Leaving Varsha out stops the water from refracting itself.
+
+For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth` × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
+
+Apple's Liquid Glass (`glassEffect`, `NSGlassEffectView`) was rejected. Its lens profile is fixed and applies per view shape. It cannot follow a particle height field.
+
 ## Known limits
+- Refraction reads a capture about one frame old, so drops can shimmer while content scrolls behind them.
+- The ad-hoc signature changes on each build, so macOS can ask for Screen Recording permission again after a rebuild.
 
 - A single raindrop is 5 to 19 particles. It lands as a thin layer and becomes a bead only after it merges with others.
 - In the edge plane, water cannot spill over the front or back of the edge; it leaves only at the corners.

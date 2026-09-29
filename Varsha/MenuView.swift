@@ -19,6 +19,8 @@ struct MenuView: View {
             Divider()
             toggle("Near-camera particles", "A sparse, faint layer that passes in front of windows.", $s.frontParticles)
             toggle("Water on windows", "Drops gather on title bars and run down the sides.", $s.windowWater)
+            toggle("Refraction", s.refraction ? Backdrop.status : "Water bends the screen behind it.", $s.refraction)
+                .disabled(!s.windowWater)
             toggle("Launch at login", "Registers Varsha with the system login items.", $s.launchAtLogin)
             HStack { Spacer(); Button("Quit") { NSApp.terminate(nil) } }
         }

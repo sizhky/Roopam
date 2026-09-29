@@ -19,6 +19,7 @@ final class RainController {
     private var windows: [WindowFrame] = []
     private var last = CACurrentMediaTime()
     private var bag = Set<AnyCancellable>()
+    private var backdrops: [Backdrop?] = []
 
     func start() {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -34,6 +35,20 @@ final class RainController {
         if settings.raining, timer == nil { startTimer() }
         if !settings.raining { timer?.invalidate(); timer = nil; hideAll() } else { showAll() }
         if timer != nil, abs((timer?.timeInterval ?? 0) - frameInterval) > 0.001 { timer?.invalidate(); startTimer() }
+        applyBackdrops()
+    }
+
+    /// One capture per screen while refraction is on; each front view reads its own screen's capture.
+    private func applyBackdrops() {
+        let wanted = settings.raining && settings.windowWater && settings.refraction
+        let fps = Int((1 / frameInterval).rounded())
+        if !wanted || backdrops.count != overlays.count || backdrops.contains(where: { $0?.fps != fps }) {
+            backdrops.forEach { $0?.stop() }
+            backdrops = wanted ? NSScreen.screens.map { Backdrop(screen: $0, device: water.device) } : []
+            let own = Set(overlays.flatMap { [$0.back.windowNumber, $0.front.windowNumber] })
+            backdrops.forEach { $0?.start(fps: fps, own: own) }
+        }
+        for (i, o) in overlays.enumerated() { o.frontView.backdrop = i < backdrops.count ? backdrops[i] : nil }
     }
 
     private var frameInterval: TimeInterval {
@@ -115,6 +130,9 @@ final class RainController {
             return ScreenOverlay(engine: engine, back: back, front: front, backView: bv, frontView: fv)
         }
         if settings.raining { showAll() }
+        backdrops.forEach { $0?.stop() }
+        backdrops = []
+        applyBackdrops()
     }
 
     private static func overlay(screen: NSScreen, view: NSView, level: NSWindow.Level) -> NSWindow {

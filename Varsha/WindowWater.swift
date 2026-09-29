@@ -116,6 +116,12 @@ struct FluidView {
     var threshold: Float
 }
 
+/// Mirrors `Lens` in Fluid.metal. Depth is in drawable pixels; a zero depth turns refraction off.
+struct FluidLens {
+    var depth: Float
+    var eta: Float
+}
+
 /// docs/varsha/physics.md: Constants. Units are points, seconds, and particles of unit mass.
 enum Fluid {
     static let spacing: Float = 0.8
@@ -146,6 +152,8 @@ enum Fluid {
     static let maxSpeed: Float = 3000
     static let splatRadius: Float = 2.6 * spacing
     static let threshold: Float = 0.8
+    static let lensDepth: Float = 6       // points of water above the glass at a bead's crown
+    static let waterIndex: Float = 1.33
 
     static func poly6(_ r2: Float) -> Float {
         let d = h * h - r2
@@ -510,19 +518,26 @@ final class WindowWater {
     }
 
     /// Draws the water visible on one screen into its layer, inside the pending step's command buffer.
-    func render(into layer: CAMetalLayer, origin: CGPoint, size: CGSize) {
+    /// With a backdrop, the water refracts it; without one, the water is shaded only.
+    func render(into layer: CAMetalLayer, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil) {
         guard let drawable = layer.nextDrawable() else { return }
-        let cb = encode(into: drawable.texture, key: ObjectIdentifier(layer), origin: origin, size: size)
+        let cb = encode(into: drawable.texture, key: ObjectIdentifier(layer), origin: origin, size: size, backdrop: backdrop)
         cb?.present(drawable)
     }
 
     /// Offscreen render of the current state, for checks. The texture must be .bgra8Unorm and render-target capable.
-    func render(into texture: MTLTexture, origin: CGPoint, size: CGSize) {
-        _ = encode(into: texture, key: ObjectIdentifier(texture), origin: origin, size: size)
+    func render(into texture: MTLTexture, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil) {
+        _ = encode(into: texture, key: ObjectIdentifier(texture), origin: origin, size: size, backdrop: backdrop)
         wait()
     }
 
-    private func encode(into target: MTLTexture, key: ObjectIdentifier, origin: CGPoint, size: CGSize) -> MTLCommandBuffer? {
+    private lazy var blank: MTLTexture = {
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 1, height: 1, mipmapped: false)
+        return device.makeTexture(descriptor: d)!
+    }()
+
+    private func encode(into target: MTLTexture, key: ObjectIdentifier, origin: CGPoint, size: CGSize,
+                        backdrop: MTLTexture?) -> MTLCommandBuffer? {
         guard let cb = pending ?? queue.makeCommandBuffer() else { return nil }
         if pending == nil { pending = cb }
         if fields[key]?.width != target.width || fields[key]?.height != target.height {
@@ -562,8 +577,12 @@ final class WindowWater {
         second.colorAttachments[0].storeAction = .store
         if let e = cb.makeRenderCommandEncoder(descriptor: second) {
             e.setRenderPipelineState(compositing)
+            let scale = Float(target.width) / Float(max(1, size.width))
+            var lens = FluidLens(depth: backdrop == nil ? 0 : Fluid.lensDepth * scale, eta: 1 / Fluid.waterIndex)
             e.setFragmentTexture(field, index: 0)
+            e.setFragmentTexture(backdrop ?? blank, index: 1)
             e.setFragmentBytes(&view, length: MemoryLayout<FluidView>.stride, index: 0)
+            e.setFragmentBytes(&lens, length: MemoryLayout<FluidLens>.stride, index: 1)
             e.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             e.endEncoding()
         }
