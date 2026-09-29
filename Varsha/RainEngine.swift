@@ -48,7 +48,7 @@ final class RainEngine {
     static func windSpeed(_ p: RainParams) -> CGFloat { p.wind * 320 }
 
     /// Share of rain aimed at a window that crosses its glass instead of its top edge.
-    static let faceShare: CGFloat = 0.4
+    static let faceShare: CGFloat = 0.9
 
     /// Inward drops per second per megapixel of screen.
     static func inwardRate(area: CGFloat, params p: RainParams) -> CGFloat {

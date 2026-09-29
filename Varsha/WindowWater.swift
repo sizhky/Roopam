@@ -86,6 +86,7 @@ struct FluidParams {
     var sleepSpeed: Float
     var sleepTime: Float
     var frameDt: Float
+    var restEvaporation: Float
     var maxSpeed: Float
     var killY: Float
     var count: UInt32
@@ -118,7 +119,7 @@ enum Fluid {
     static let spacing: Float = 0.8
     static let h: Float = 1.6
     static let radius: Float = 0.4
-    static let capacity = 131_072
+    static let capacity = 98_304
     static let tableSize = 1 << 18
     static let bucket = 16
     static var substeps = 8
@@ -466,6 +467,13 @@ final class WindowWater {
         spawns.removeAll(keepingCapacity: true)
     }
 
+    /// docs/varsha/physics.md: Particle budget. Above 60% occupancy still (sleeping) water dries faster, up to 31x
+    /// when full, so arriving rain keeps entering the fluid and old still droplets give way to moving water.
+    private var budgetedEvaporation: Float {
+        let occupancy = Float(highWater) / Float(Fluid.capacity)
+        return evaporation * (1 + 30 * max(0, occupancy - 0.6) / 0.4)
+    }
+
     private func parameters(dt: Float, wind p: RainParams) -> FluidParams {
         seed = seed &* 1_664_525 &+ 1_013_904_223
         return FluidParams(gravity: SIMD2(0, Fluid.gravity), wind: SIMD2(Float(RainEngine.windSpeed(p)), 0), dt: dt,
@@ -476,7 +484,7 @@ final class WindowWater {
                            corner: Float(Glass.cornerRadius), scorrK: Fluid.scorrK,
                            scorrW: Fluid.poly6(pow(0.2 * Fluid.h, 2)), bond: Fluid.bond, bondRest: Fluid.bondRest,
                            sleepSpeed: Fluid.sleepSpeed, sleepTime: Fluid.sleepTime,
-                           frameDt: dt * Float(Fluid.substeps), maxSpeed: Fluid.maxSpeed, killY: killY,
+                           frameDt: dt * Float(Fluid.substeps), restEvaporation: budgetedEvaporation, maxSpeed: Fluid.maxSpeed, killY: killY,
                            count: UInt32(highWater), windowCount: UInt32(min(windows.count, Fluid.maxWindows)),
                            tableMask: UInt32(Fluid.tableSize - 1), seed: seed)
     }

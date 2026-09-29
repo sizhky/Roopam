@@ -26,6 +26,7 @@ struct Params {
     float sleepSpeed;
     float sleepTime;
     float frameDt;
+    float restEvaporation;
     float maxSpeed;
     float killY;
     uint count;
@@ -304,7 +305,7 @@ kernel void forces(device const Particle *ps [[buffer(0)]], device const uint *c
 
 /// Deactivation (as in rigid-body engines): water still for sleepTime stops being integrated and acts as a
 /// fixed neighbour. It wakes when its window moves or when moving water of the same plane reaches it.
-/// Sleeping water keeps evaporating, once per frame.
+/// Sleeping water keeps evaporating, once per frame, at the budgeted rate (docs/varsha/physics.md: Particle budget).
 kernel void wake(device Particle *ps [[buffer(0)]], device const uint *counts [[buffer(1)]],
                  device const uint *cells [[buffer(2)]], device const int2 *cellCoord [[buffer(3)]],
                  device float *idle [[buffer(4)]], device const float *surface [[buffer(5)]],
@@ -313,7 +314,7 @@ kernel void wake(device Particle *ps [[buffer(0)]], device const uint *counts [[
     if (i >= P.count) return;
     Particle me = ps[i];
     if (me.mode == DEAD || !asleep(idle, i, P)) return;
-    if (hash01(i, P.seed ^ 0x9e3779b9u) < P.evaporation * surface[i] * P.frameDt) { ps[i].mode = DEAD; return; }
+    if (hash01(i, P.seed ^ 0x9e3779b9u) < P.restEvaporation * surface[i] * P.frameDt) { ps[i].mode = DEAD; return; }
     int wi = findWindow(me.window, ws, P.windowCount);
     bool stir = wi < 0 || length(ws[wi].velocity) > 0.0;
     FOR_NEIGHBORS(me.x, { if (!asleep(idle, j, P) && length(o.v) >= P.sleepSpeed) stir = true; })

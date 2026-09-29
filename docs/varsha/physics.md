@@ -27,10 +27,23 @@ Every particle belongs to one window and one plane.
 
 - Edge plane (`SIDE`): the side view. The window is a solid rounded rectangle. Rain that hits the top edge enters here.
 - Glass face (`FACE`): the view through the pane. Rain that crosses the glass enters here.
+  Each screen also has a glass face (id `-1000 - index`, rank -1). It sits in front of every window.
+  Inward rain (see Rain sources) that lands over the desktop enters there.
 - `DETACHED`: face water that left the pane. It falls freely.
 
 Particles interact only with particles of the same window and plane.
 Water of a window is hidden behind every window in front of it, per pixel, in `splatFragment`.
+
+## Rain sources
+
+- Falling streaks aimed at a window: 90% cross its glass at a random height (`RainEngine.faceShare`), 10% meet its outline.
+  `WindowFrame.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
+  A real top edge is a few millimetres deep, so it receives a small share of the rain.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, 45 per second per megapixel at full intensity.
+  Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
+- Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
+
+Streaks have a dark offset under-stroke so they stay visible on light backgrounds.
 
 ## Forces and constraints
 
@@ -64,7 +77,7 @@ Units are points and seconds. Particles have unit mass.
 | adhesion | 6000 | Higher values spread drops into a single layer |
 | pin | 4000 | Face drops below radius about 3.5 pt stay; larger ones slide |
 | substrateDrag | 15 | Sliding drops move at 10 to 50 pt/s |
-| evaporation | 0.02 per s per exposed particle | Faster than real drying in rain, chosen for the frame budget |
+| evaporation | 0.03 per s per exposed particle | Faster than real drying in rain, chosen for the frame budget |
 
 ## Rejected approaches
 
@@ -73,17 +86,20 @@ Units are points and seconds. Particles have unit mass.
 - Position-based curvature reduction: not derived from an energy. Free drops explode at any strength tried; it looked stable on the face only because glass drag damped it.
 - Depth-scaled Coulomb friction on the edge: resting water carries almost no normal load, so it glides.
 
+## Particle budget
+
+Each visible drop is 20 to 200 particles, so realistic coverage of glass in a downpour would need over a million.
+The limit is 98,304 particles. Above 60% occupancy, sleeping (still) water dries faster, up to 31× at the limit.
+Moving water keeps the base rate. So arriving rain always enters the fluid, and trickles keep their water.
+
 ## Performance
 
-Measured on the development Mac (Mac16,7), two large windows, heavy rain:
+Measured on the development Mac (Mac16,7): two large windows plus the screen glass, 120 s of rain:
 
-| Time | Particles | GPU per frame | Asleep |
+| Intensity | Particles | GPU per frame | Sliding particles |
 |---|---|---|---|
-| 10 s | 21k | 2.0 ms | 26% |
-| 60 s | 63k | 4.9 ms | 42% |
-| 120 s | 77k | 5.6 ms | 50% |
-
-Edge water levels off near 36k, where corner runoff matches the rain. Face water still grows by about 2k per 10 s at 120 s.
+| 0.5 (medium) | 65k | 5.9 ms | about 1.4k |
+| 1.0 (downpour) | 86k | 9.5 ms | about 3k |
 
 Three measures keep this cost down:
 
@@ -91,10 +107,11 @@ Three measures keep this cost down:
 - A cell sort every 30 frames keeps neighbour reads close in memory. It gave a 2.2× speedup.
 - The frame step never blocks the main thread. It skips a frame if the GPU is still busy.
 
-The particle limit is 131,072. Past it, new rain does not enter the fluid.
+The Energy Saver quality runs at 30 fps, which halves the cost.
 
 ## Known limits
 
 - A single raindrop is 5 to 19 particles. It lands as a thin layer and becomes a bead only after it merges with others.
 - In the edge plane, water cannot spill over the front or back of the edge; it leaves only at the corners.
-- In a 20 s heavy-rain scene, few face drops grow large enough to slide. Sliding comes after minutes of merging.
+- Edge water drains only at the corners, so in a long downpour the edge film keeps thickening slowly.
+- Screen-glass water is drawn in front of windows, but inward rain over a window lands on that window.
