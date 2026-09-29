@@ -388,11 +388,11 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
         dx += (height(int2(k, 0)) - height(int2(-k, 0))) / float(k);
         dy += (height(int2(0, k)) - height(int2(0, -k))) / float(k);
     }
-    float cover = smoothstep(0.0, 0.08, z);
+    float cover = smoothstep(0.18, 0.45, z);   // a film thinner than this neither bends light nor shows an edge
     float3 n = normalize(float3(-dx * 1.6, -dy * 1.6, 1.0));
     float3 L = normalize(float3(-0.45, -0.75, 0.55));
     float3 H = normalize(L + float3(0, 0, 1));
-    float spec = pow(max(dot(n, H), 0.0), 36.0) * 0.9;
+    float spec = pow(max(dot(n, H), 0.0), 80.0) * smoothstep(0.5, 0.9, z);   // one glint on each bead's crown
     float slope = 1.0 - n.z;
     float edge = smoothstep(0.05, 0.5, slope);
     float focus = max(0.0, dot(normalize(n.xy + 1e-6), -L.xy)) * smoothstep(0.02, 0.25, slope) * (1.0 - edge * 0.6) * 0.5;

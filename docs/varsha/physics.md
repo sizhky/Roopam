@@ -124,6 +124,8 @@ Refraction is off by default. When it is on, a ScreenCaptureKit stream copies ea
 
 For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth` × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
 
+Water below 18% of the height scale is not drawn, and it is fully drawn from 45%. At the first threshold of 8%, one-particle films between beads drew rims around every gap and looked etched. Only the thick upper-left slope of a bead (above 50% height) gets a highlight.
+
 Apple's Liquid Glass (`glassEffect`, `NSGlassEffectView`) was rejected. Its lens profile is fixed and applies per view shape. It cannot follow a particle height field.
 
 ## Known limits
