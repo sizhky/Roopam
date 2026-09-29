@@ -49,9 +49,12 @@ final class RainEngine {
     /// Share of background rain aimed at a window's outline; the rest falls behind every window.
     static let aimedShare: CGFloat = 0.35
 
+    /// Radius scale of inward drops. The rate falls with its square, so water per second stays the same.
+    static let inwardSize: CGFloat = 1.6
+
     /// Inward drops per second per megapixel of screen.
     static func inwardRate(area: CGFloat, params p: RainParams) -> CGFloat {
-        area / 1_000_000 * 90 * pow(p.intensity, 1.2) * p.densityScale
+        area / 1_000_000 * 90 * pow(p.intensity, 1.2) * p.densityScale / (inwardSize * inwardSize)
     }
 
     /// Screen-local outlines of the windows rain can be aimed at, by window id.
@@ -93,7 +96,7 @@ final class RainEngine {
             let u = CGFloat.random(in: 0...1)
             let fall = CGFloat.random(in: 450...900)
             inward.append(InwardDrop(target: CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height)),
-                                     life: .random(in: 0.08...0.18), radius: 1.5 + 3.0 * u * u,
+                                     life: .random(in: 0.08...0.18), radius: (1.5 + 3.0 * u * u) * Self.inwardSize,
                                      drift: CGVector(dx: Self.windSpeed(p) * 0.8, dy: fall)))
         }
         for i in inward.indices { inward[i].age += dt }

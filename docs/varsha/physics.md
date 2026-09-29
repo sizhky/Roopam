@@ -42,7 +42,7 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
   Wind reaches 600 pt/s, which slants the fastest streaks to about 25° and the slowest to about 30°.
   `WindowWater.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
   Falling streaks never land on glass mid-fall; a drop that appeared there looked as if it came from nowhere.
-- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 1.5 to 4.5 pt. It is the only source of water on glass.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, radius 2.4 to 7.2 pt, 35 per second per megapixel at full intensity. It is the only source of water on glass. The radius is 1.6× the first value (1.5 to 4.5 pt) so drops are large enough to refract; the rate is divided by 1.6², so water per second is unchanged.
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
