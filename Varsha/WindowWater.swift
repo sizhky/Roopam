@@ -95,6 +95,7 @@ struct FluidParams {
     var windowCount: UInt32
     var tableMask: UInt32
     var seed: UInt32
+    var shapeDecay: Float
 }
 
 /// Mirrors `Window` in Fluid.metal.
@@ -114,14 +115,18 @@ struct FluidView {
     var corner: Float
     var windowCount: UInt32
     var threshold: Float
+    var angle: Float
+    var rim: Float
 }
 
-/// Mirrors `Lens` in Fluid.metal. Depth and shift are in drawable pixels; a zero depth turns refraction off.
+/// Mirrors `Lens` in Fluid.metal. Scale is drawable pixels per point; gap is in points; shift is in drawable pixels.
 struct FluidLens {
-    var depth: Float
+    var scale: Float
+    var gap: Float
     var eta: Float
     var shift: Float
     var change: Float
+    var on: UInt32
 }
 
 /// docs/varsha/physics.md: Constants. Units are points, seconds, and particles of unit mass.
@@ -154,7 +159,10 @@ enum Fluid {
     static let maxSpeed: Float = 3000
     static let splatRadius: Float = 2.6 * spacing
     static let threshold: Float = 0.8
-    static let lensDepth: Float = 16      // points of water above the glass at a bead's crown
+    static var contactAngle: Float = 60 * .pi / 180  // water on weathered window glass
+    static var rim: Float = 0.6           // points from the outermost particle centres to the contact line
+    static let shapeDecay: Float = 10     // points per second a drop's radius may shrink after it splits
+    static var contentGap: Float = 10     // points from the water's base to the content it refracts
     static let waterIndex: Float = 1.33
     static let liveShift: Float = 0.75      // points of refraction offset at which the captured image fully replaces the live one
     static let staleChange: Float = 0.12  // colour change between captures at which the captured image fully gives way
@@ -201,7 +209,7 @@ final class WindowWater {
     private let pipelines: [String: MTLComputePipelineState]
     private let splat: MTLRenderPipelineState
     private let compositing: MTLRenderPipelineState
-    private let particles, accel, lambda, surface, idle, dp, cellCoord, counts, cells: MTLBuffer
+    private let particles, accel, lambda, surface, idle, dp, cellCoord, counts, cells, edge, edgeNext: MTLBuffer
     private var free: [Int32] = []
     private var highWater = 0
     private var spawns: [Particle] = []
@@ -235,11 +243,11 @@ final class WindowWater {
             catch { preconditionFailure("\(name): \(error)") }
         }
         pipelines = Dictionary(uniqueKeysWithValues: ["predict", "clearGrid", "insert", "solveLambda", "solveDelta",
-                                                       "applyDelta", "finish", "forces", "wake"].map { ($0, compute($0)) })
+                                                       "applyDelta", "finish", "forces", "wake", "shape"].map { ($0, compute($0)) })
         let s = MTLRenderPipelineDescriptor()
         s.vertexFunction = library.makeFunction(name: "splatVertex")
         s.fragmentFunction = library.makeFunction(name: "splatFragment")
-        s.colorAttachments[0].pixelFormat = .r16Float
+        s.colorAttachments[0].pixelFormat = .rg16Float
         s.colorAttachments[0].isBlendingEnabled = true
         s.colorAttachments[0].rgbBlendOperation = .add
         s.colorAttachments[0].sourceRGBBlendFactor = .one
@@ -266,6 +274,9 @@ final class WindowWater {
         idle = buffer(n * 4, .storageModeShared)
         memset(idle.contents(), 0, idle.length)
         dp = buffer(n * 8)
+        edge = buffer(n * 8, .storageModeShared)
+        memset(edge.contents(), 0, edge.length)
+        edgeNext = buffer(n * 8)
         cellCoord = buffer(n * 8)
         counts = buffer(Fluid.tableSize * 4)
         cells = buffer(Fluid.tableSize * Fluid.bucket * 4)
@@ -414,6 +425,7 @@ final class WindowWater {
         let forces = accel.contents().bindMemory(to: SIMD2<Float>.self, capacity: Fluid.capacity)
         let exposed = surface.contents().bindMemory(to: Float.self, capacity: Fluid.capacity)
         let still = idle.contents().bindMemory(to: Float.self, capacity: Fluid.capacity)
+        let shape = edge.contents().bindMemory(to: SIMD2<Float>.self, capacity: Fluid.capacity)
         var order: [Int32] = [], keys: [UInt32] = []
         order.reserveCapacity(highWater); keys.reserveCapacity(highWater)
         for i in 0..<highWater where ps[i].mode != Particle.dead {
@@ -432,8 +444,8 @@ final class WindowWater {
             order = nextOrder; keys = nextKeys
         }
         let p0 = order.map { ps[Int($0)] }, a0 = order.map { forces[Int($0)] }
-        let s0 = order.map { exposed[Int($0)] }, i0 = order.map { still[Int($0)] }
-        for (n, _) in order.enumerated() { ps[n] = p0[n]; forces[n] = a0[n]; exposed[n] = s0[n]; still[n] = i0[n] }
+        let s0 = order.map { exposed[Int($0)] }, i0 = order.map { still[Int($0)] }, e0 = order.map { shape[Int($0)] }
+        for (n, _) in order.enumerated() { ps[n] = p0[n]; forces[n] = a0[n]; exposed[n] = s0[n]; still[n] = i0[n]; shape[n] = e0[n] }
         for n in order.count..<highWater { ps[n].mode = Particle.dead }
         highWater = order.count
     }
@@ -450,6 +462,7 @@ final class WindowWater {
         let forces = accel.contents().bindMemory(to: SIMD2<Float>.self, capacity: Fluid.capacity)
         let exposed = surface.contents().bindMemory(to: Float.self, capacity: Fluid.capacity)
         let still = idle.contents().bindMemory(to: Float.self, capacity: Fluid.capacity)
+        let shape = edge.contents().bindMemory(to: SIMD2<Float>.self, capacity: Fluid.capacity)
         var next = top
         for s in spawns {
             let slot: Int
@@ -460,6 +473,7 @@ final class WindowWater {
             forces[slot] = .zero
             exposed[slot] = 1
             still[slot] = 0
+            shape[slot] = .zero
         }
         highWater = max(top, next)
         spawns.removeAll(keepingCapacity: true)
@@ -484,7 +498,7 @@ final class WindowWater {
                            sleepSpeed: Fluid.sleepSpeed, sleepTime: Fluid.sleepTime,
                            frameDt: dt * Float(Fluid.substeps), restEvaporation: budgetedEvaporation, maxSpeed: Fluid.maxSpeed, killY: killY,
                            count: UInt32(highWater), windowCount: UInt32(min(windows.count, Fluid.maxWindows)),
-                           tableMask: UInt32(Fluid.tableSize - 1), seed: seed)
+                           tableMask: UInt32(Fluid.tableSize - 1), seed: seed, shapeDecay: Fluid.shapeDecay)
     }
 
     private func encodeSubstep(_ cb: MTLCommandBuffer, windows ws: [FluidWindow], params P: FluidParams, first: Bool) {
@@ -518,6 +532,10 @@ final class WindowWater {
         run("finish", [particles, surface, idle], windows: true)
         grid()
         run("forces", [particles, counts, cells, cellCoord, surface, accel, idle], windows: true)
+        for _ in 0..<(first ? 2 : 0) {
+            run("shape", [particles, counts, cells, cellCoord, surface, edge, edgeNext])
+            run("shape", [particles, counts, cells, cellCoord, surface, edgeNext, edge])
+        }
         e.endEncoding()
     }
 
@@ -547,7 +565,7 @@ final class WindowWater {
         guard let cb = pending ?? queue.makeCommandBuffer() else { return nil }
         if pending == nil { pending = cb }
         if fields[key]?.width != target.width || fields[key]?.height != target.height {
-            let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: target.width,
+            let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg16Float, width: target.width,
                                                              height: target.height, mipmapped: false)
             d.usage = [.renderTarget, .shaderRead]
             d.storageMode = .private
@@ -556,7 +574,8 @@ final class WindowWater {
         guard let field = fields[key] else { return cb }
         var view = FluidView(origin: SIMD2(Float(origin.x), Float(origin.y)), size: SIMD2(Float(size.width), Float(size.height)),
                              radius: Fluid.splatRadius, corner: Float(Glass.cornerRadius),
-                             windowCount: UInt32(gpuWindows.count), threshold: Fluid.threshold)
+                             windowCount: UInt32(gpuWindows.count), threshold: Fluid.threshold,
+                             angle: Fluid.contactAngle, rim: Fluid.rim)
         var ws = gpuWindows.isEmpty ? [FluidWindow(origin: .zero, size: .zero, velocity: .zero, id: -1, rank: 0)] : gpuWindows
         let windowBytes = ws.count * MemoryLayout<FluidWindow>.stride
         let first = MTLRenderPassDescriptor()
@@ -570,6 +589,7 @@ final class WindowWater {
                 e.setVertexBuffer(particles, offset: 0, index: 0)
                 e.setVertexBytes(&view, length: MemoryLayout<FluidView>.stride, index: 1)
                 e.setVertexBytes(&ws, length: windowBytes, index: 2)
+                e.setVertexBuffer(edge, offset: 0, index: 3)
                 e.setFragmentBytes(&view, length: MemoryLayout<FluidView>.stride, index: 0)
                 e.setFragmentBytes(&ws, length: windowBytes, index: 1)
                 e.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: highWater)
@@ -584,8 +604,8 @@ final class WindowWater {
         if let e = cb.makeRenderCommandEncoder(descriptor: second) {
             e.setRenderPipelineState(compositing)
             let scale = Float(target.width) / Float(max(1, size.width))
-            var lens = FluidLens(depth: backdrop == nil ? 0 : Fluid.lensDepth * scale, eta: 1 / Fluid.waterIndex,
-                                 shift: Fluid.liveShift * scale, change: Fluid.staleChange)
+            var lens = FluidLens(scale: scale, gap: Fluid.contentGap, eta: 1 / Fluid.waterIndex,
+                                 shift: Fluid.liveShift * scale, change: Fluid.staleChange, on: backdrop == nil ? 0 : 1)
             e.setFragmentTexture(field, index: 0)
             e.setFragmentTexture(backdrop ?? blank, index: 1)
             e.setFragmentTexture(previous ?? backdrop ?? blank, index: 2)

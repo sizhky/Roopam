@@ -117,11 +117,20 @@ The Energy Saver quality runs at 30 fps, which halves the cost.
 
 ## Rendering
 
-The splat pass sums particle kernels into a field. The composite pass treats the field as the water height over the glass.
+The splat pass sums particle kernels into a two-channel field: kernel weight, and kernel weight times particle height. The composite pass divides them to get the water height in points.
+
+A drop on glass is a spherical cap: surface tension under a uniform internal pressure gives constant curvature (Young-Laplace). The particle density is flat inside a drop, so density alone gave a flat top and a 1 pt slope at the rim, and only the rim refracted. The `shape` kernel gives each particle its distance `d` to the contact line and its drop radius `a`:
+- `d` relaxes over the neighbour graph (Bellman-Ford). Exposed particles are 0; every other particle takes the minimum over neighbours of their `d` plus the gap to them.
+- `a` is the largest `d` in the drop, spread by a maximum over neighbours. It shrinks at `Fluid.shapeDecay` (10 pt/s), so a drop that splits resizes.
+- It runs four passes in the first substep of each frame, so a 7 pt drop settles in about three frames.
+
+Particle height is `sqrt(R² − (a − d)²) − R cos θ` with `R = a / sin θ`, both offset by `Fluid.rim` (0.6 pt) from the outermost particle centres to the contact line. The contact angle θ is `Fluid.contactAngle` (60°, weathered window glass).
 
 Refraction is off by default. When it is on, a ScreenCaptureKit stream copies each display without Varsha's own windows. Leaving Varsha out stops the water from refracting itself.
 
-For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth`, 16 pt, × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
+For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water height and a further `Fluid.contentGap` (10 pt) to the content, then reads the captured pixel it reaches. The cap is a plano-convex lens of focal length `R / (n − 1)`, so magnification is about `f / (f − gap)`: 1.4× for a 7 pt drop.
+
+Tuned by headless renders over a dark and a white screenshot. A 4 pt gap magnified about 1.1×, which was not visible. A 24 pt gap put the content past the focal length of most drops, which inverted and smeared it. At 60° and 10 pt, drops under 3 pt are near focus and show mostly the dark surroundings, as small real drops do. The specular exponent is 160, because the broader normals of a cap made the old exponent of 36 a large white blob.
 
 The capture is at least one frame behind the screen. The window server composites frame N, ScreenCaptureKit then delivers it, and the water drawn from it appears over frame N+1. No capture-based renderer can remove this lag. A zero-lag lens needs the window server itself (`CABackdropLayer`), which is private and has no displacement filter.
 

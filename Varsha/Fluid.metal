@@ -35,9 +35,10 @@ struct Params {
     uint windowCount;
     uint tableMask;
     uint seed;
+    float shapeDecay;
 };
-struct View { float2 origin; float2 size; float radius; float corner; uint windowCount; float threshold; };
-struct Lens { float depth; float eta; float shift; float change; };
+struct View { float2 origin; float2 size; float radius; float corner; uint windowCount; float threshold; float angle; float rim; };
+struct Lens { float scale; float gap; float eta; float shift; float change; uint on; };
 
 constant int DEAD = 0;
 constant int SIDE = 1;
@@ -324,16 +325,37 @@ kernel void wake(device Particle *ps [[buffer(0)]], device const uint *counts [[
     if (stir) idle[i] = 0.0;
 }
 
+/// docs/varsha/physics.md: Rendering. Distance from each particle to its drop's contact line, relaxed over the
+/// neighbour graph (Bellman-Ford), and the largest such distance in its drop, which is the drop's radius.
+/// Exposed particles lie on the contact line. The radius decays slowly, so a drop that splits shrinks to fit.
+kernel void shape(device const Particle *ps [[buffer(0)]], device const uint *counts [[buffer(1)]],
+                  device const uint *cells [[buffer(2)]], device const int2 *cellCoord [[buffer(3)]],
+                  device const float *surface [[buffer(4)]], device const float2 *edgeIn [[buffer(5)]],
+                  device float2 *edgeOut [[buffer(6)]], constant Params &P [[buffer(7)]],
+                  uint i [[thread_position_in_grid]]) {
+    if (i >= P.count) return;
+    Particle me = ps[i];
+    if (me.mode == DEAD) { edgeOut[i] = float2(0); return; }
+    float d = surface[i] >= 0.5 ? 0.0 : 1e4, a = 0.0;
+    FOR_NEIGHBORS(me.x, {
+        float l = length(me.x - o.x);
+        if (l < P.h) { float2 e = edgeIn[j]; d = min(d, e.x + l); a = max(a, e.y); }
+    })
+    if (d >= 1e4) d = 0.0;
+    edgeOut[i] = float2(d, max(d, a - P.shapeDecay * P.frameDt * 0.25));
+}
+
 struct SplatOut {
     float4 position [[position]];
     float2 uv;
     float2 world;
     int rank [[flat]];
+    float height [[flat]];
 };
 
 vertex SplatOut splatVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                             device const Particle *ps [[buffer(0)]], constant View &V [[buffer(1)]],
-                            constant Window *ws [[buffer(2)]]) {
+                            constant Window *ws [[buffer(2)]], device const float2 *edge [[buffer(3)]]) {
     SplatOut o;
     Particle q = ps[iid];
     float2 corner = float2((vid & 1) ? 1.0 : -1.0, (vid & 2) ? 1.0 : -1.0);
@@ -345,19 +367,23 @@ vertex SplatOut splatVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     o.world = world;
     int k = findWindow(q.window, ws, V.windowCount);
     o.rank = k < 0 ? 0 : ws[k].rank;
+    // Spherical cap of contact angle V.angle over the drop's footprint: surface tension under uniform pressure.
+    float a = edge[iid].y + V.rim, r = a - (edge[iid].x + V.rim), Rc = a / sin(V.angle);
+    o.height = max(0.0, sqrt(max(Rc * Rc - r * r, 0.0)) - Rc * cos(V.angle));
     return o;
 }
 
 /// Water of window k is hidden wherever a window in front of k covers it. Screen glass has rank -1:
 /// nothing covers it, and it covers nothing.
-fragment float splatFragment(SplatOut in [[stage_in]], constant View &V [[buffer(0)]], constant Window *ws [[buffer(1)]]) {
+fragment float2 splatFragment(SplatOut in [[stage_in]], constant View &V [[buffer(0)]], constant Window *ws [[buffer(1)]]) {
     float r2 = dot(in.uv, in.uv);
     if (r2 >= 1.0) discard_fragment();
     for (uint k = 0; k < V.windowCount; k++) {
         if (ws[k].rank >= 0 && ws[k].rank < in.rank && roundedBox(in.world, ws[k], V.corner) < 0.0) discard_fragment();
     }
     float w = 1.0 - r2;
-    return w * w * w;
+    w = w * w * w;
+    return float2(w, w * in.height);
 }
 
 struct FullOut { float4 position [[position]]; };
@@ -369,9 +395,9 @@ vertex FullOut fullscreen(uint vid [[vertex_id]]) {
     return o;
 }
 
-/// Treats the saturated field as the height of a clear lens over the background: the steep rim refracts the
-/// dark surroundings, the top-left slope reflects a highlight, and light focused through the drop brightens the far side.
-/// With a backdrop, a view ray refracts at the water surface (Snell) and reads the pixel it reaches on the glass.
+/// docs/varsha/physics.md: Rendering. The field holds splat weight and weight times cap height, so their ratio is the
+/// water height in points. The weight fades the height to zero at the contact line.
+/// A view ray refracts at the water surface (Snell) and travels through the water and the gap to the content below.
 /// The capture is one frame older than the screen under the overlay. Where the ray lands near its own pixel, or where
 /// the last two captures differ, the drop lets the live pixel through and only darkens it, so stale colour never shows.
 fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[texture(0)]],
@@ -380,29 +406,32 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
     int2 c = int2(in.position.xy);
     int2 last = int2(field.get_width() - 1, field.get_height() - 1);
     auto height = [&](int2 o) {
-        float d = field.read(uint2(clamp(c + o, int2(0), last))).r;
-        return smoothstep(V.threshold * 0.45, V.threshold * 2.2, d);
+        float2 f = field.read(uint2(clamp(c + o, int2(0), last))).rg;
+        float fade = smoothstep(V.threshold * 0.45, V.threshold * 2.2, f.r);
+        return f.r > 1e-4 ? f.g / f.r * fade : 0.0;
     };
-    float z = height(int2(0));
+    float2 f0 = field.read(uint2(c)).rg;
+    float z = smoothstep(V.threshold * 0.45, V.threshold * 2.2, f0.r);
     if (z <= 0.0) return float4(0);
-    float dx = 0.0, dy = 0.0;
+    float h = height(int2(0)), dx = 0.0, dy = 0.0;
     for (int k = 1; k <= 3; k++) {
-        dx += (height(int2(k, 0)) - height(int2(-k, 0))) / float(k);
-        dy += (height(int2(0, k)) - height(int2(0, -k))) / float(k);
+        dx += (height(int2(k, 0)) - height(int2(-k, 0))) / float(2 * k);
+        dy += (height(int2(0, k)) - height(int2(0, -k))) / float(2 * k);
     }
+    dx *= lens.scale / 3.0; dy *= lens.scale / 3.0;
     float cover = smoothstep(0.0, 0.08, z);
-    float3 n = normalize(float3(-dx * 1.6, -dy * 1.6, 1.0));
+    float3 n = normalize(float3(-dx, -dy, 1.0));
     float3 L = normalize(float3(-0.45, -0.75, 0.55));
     float3 H = normalize(L + float3(0, 0, 1));
-    float spec = pow(max(dot(n, H), 0.0), 36.0) * 0.9;
+    float spec = pow(max(dot(n, H), 0.0), 160.0) * 0.9;
     float slope = 1.0 - n.z;
     float edge = smoothstep(0.05, 0.5, slope);
     float focus = max(0.0, dot(normalize(n.xy + 1e-6), -L.xy)) * smoothstep(0.02, 0.25, slope) * (1.0 - edge * 0.6) * 0.5;
     float light = min(1.0, spec + focus);
-    if (lens.depth > 0.0) {
+    if (lens.on != 0) {
         constexpr sampler s(filter::linear, address::clamp_to_edge);
         float3 t = refract(float3(0, 0, -1), n, lens.eta);
-        float2 hit = in.position.xy + t.xy / max(-t.z, 0.2) * z * lens.depth;
+        float2 hit = in.position.xy + t.xy / max(-t.z, 0.2) * (h + lens.gap) * lens.scale;
         float2 pixels = float2(field.get_width(), field.get_height());
         float2 at = hit / pixels, here = in.position.xy / pixels;
         float3 behind = backdrop.sample(s, at).rgb;
