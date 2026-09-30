@@ -42,7 +42,7 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
   Wind reaches 600 pt/s, which slants the fastest streaks to about 25° and the slowest to about 30°.
   `WindowWater.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
   Falling streaks never land on glass mid-fall; a drop that appeared there looked as if it came from nowhere.
-- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 1.5 to 4.5 pt. It is the only source of water on glass.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 1.8 to 5.4 pt. It is the only source of water on glass.
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
@@ -121,12 +121,12 @@ The splat pass sums particle kernels into a field. The composite pass treats the
 
 Refraction is off by default. When it is on, a ScreenCaptureKit stream copies each display without Varsha's own windows. Leaving Varsha out stops the water from refracting itself.
 
-For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth` × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
+For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth`, 10 pt, × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
 
 The capture is at least one frame behind the screen. The window server composites frame N, ScreenCaptureKit then delivers it, and the water drawn from it appears over frame N+1. No capture-based renderer can remove this lag. A zero-lag lens needs the window server itself (`CABackdropLayer`), which is private and has no displacement filter.
 
 The composite hides the lag in two ways. Both let the live pixel under the overlay show through, only darkened by the drop, instead of the captured one.
-- Near the drop centre, the ray lands close to its own pixel, so the live pixel is almost the refracted one. The captured image fades in with the ray offset and replaces the live pixel fully at `Fluid.liveShift` (2 pt). Stale colour can then appear only on the rim.
+- Near the drop centre, the ray lands close to its own pixel, so the live pixel is almost the refracted one. The captured image fades in with the ray offset and replaces the live pixel fully at `Fluid.liveShift` (1.25 pt). Stale colour can then appear only on the rim.
 - Where the last two captures differ, the screen is changing, so the newest capture is probably stale too. The captured image fades out and is gone at a colour change of `Fluid.staleChange` (0.12 per channel). The test runs at both the pixel and the point the ray lands on.
 
 Apple's Liquid Glass (`glassEffect`, `NSGlassEffectView`) was rejected. Its lens profile is fixed and applies per view shape. It cannot follow a particle height field.

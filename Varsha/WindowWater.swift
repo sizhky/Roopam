@@ -154,9 +154,9 @@ enum Fluid {
     static let maxSpeed: Float = 3000
     static let splatRadius: Float = 2.6 * spacing
     static let threshold: Float = 0.8
-    static let lensDepth: Float = 6       // points of water above the glass at a bead's crown
+    static let lensDepth: Float = 10      // points of water above the glass at a bead's crown
     static let waterIndex: Float = 1.33
-    static let liveShift: Float = 2       // points of refraction offset at which the captured image fully replaces the live one
+    static let liveShift: Float = 1.25      // points of refraction offset at which the captured image fully replaces the live one
     static let staleChange: Float = 0.12  // colour change between captures at which the captured image fully gives way
 
     static func poly6(_ r2: Float) -> Float {
