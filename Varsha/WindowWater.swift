@@ -148,7 +148,7 @@ enum Fluid {
     static var pin: Float = 2500      // glass pane face
     static var edgePin: Float = 4000  // window frame edge
     static var edgeDrag: Float = 15
-    static var substrateDrag: Float = 18
+    static var substrateDrag: Float = 28
     static let evaporation: Float = 0.03
     static let impactRetention: CGFloat = 0.1
     static var scorrK: Float = 0.02

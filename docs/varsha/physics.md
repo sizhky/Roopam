@@ -42,7 +42,7 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
   Wind reaches 600 pt/s, which slants the fastest streaks to about 25° and the slowest to about 30°.
   `WindowWater.edgeHit` finds the first entry point on any side, so wind-driven rain also meets the sides.
   Falling streaks never land on glass mid-fall; a drop that appeared there looked as if it came from nowhere.
-- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 2.4 to 7.2 pt. It is the only source of water on glass.
+- Inward rain (`InwardDrop`): drops moving toward the viewer, 90 per second per megapixel at full intensity, radius 1.8 to 5.4 pt. It is the only source of water on glass.
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
@@ -80,7 +80,7 @@ Units are points and seconds. Particles have unit mass.
 | bond, bondRest | 0.6, 1.8 spacing | A rest distance at the lattice spacing fights the second lattice ring and makes resting water jitter at 20 to 30 pt/s |
 | adhesion | 6000 | Higher values spread drops into a single layer |
 | pin | 2500 | Glass pane. Raindrop-sized drops stay; drops from radius about 2 pt slide |
-| substrateDrag | 18 | Glass pane. Sliding drops reach about gravity / drag = 100 pt/s, so merged drops trickle slowly |
+| substrateDrag | 28 | Glass pane. Sliding drops reach about gravity / drag = 64 pt/s, so merged drops trickle slowly |
 | edgePin, edgeDrag | 4000, 15 | Window frame edge, a different material. With pane values, water wicks along the top instead of running off the corner |
 | evaporation | 0.03 per s per exposed particle | Faster than real drying in rain, chosen for the frame budget |
 

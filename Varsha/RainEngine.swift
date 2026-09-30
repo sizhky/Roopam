@@ -93,7 +93,7 @@ final class RainEngine {
             let u = CGFloat.random(in: 0...1)
             let fall = CGFloat.random(in: 450...900)
             inward.append(InwardDrop(target: CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height)),
-                                     life: .random(in: 0.08...0.18), radius: 2.4 + 4.8 * u * u,
+                                     life: .random(in: 0.08...0.18), radius: 1.8 + 3.6 * u * u,
                                      drift: CGVector(dx: Self.windSpeed(p) * 0.8, dy: fall)))
         }
         for i in inward.indices { inward[i].age += dt }
