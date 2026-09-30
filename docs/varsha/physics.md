@@ -80,7 +80,7 @@ Units are points and seconds. Particles have unit mass.
 | bond, bondRest | 0.6, 1.8 spacing | A rest distance at the lattice spacing fights the second lattice ring and makes resting water jitter at 20 to 30 pt/s |
 | adhesion | 6000 | Higher values spread drops into a single layer |
 | pin | 2500 | Glass pane. Raindrop-sized drops stay; drops from radius about 2 pt slide |
-| substrateDrag | 8 | Glass pane. Low friction, so merged drops trickle |
+| substrateDrag | 18 | Glass pane. Sliding drops reach about gravity / drag = 100 pt/s, so merged drops trickle slowly |
 | edgePin, edgeDrag | 4000, 15 | Window frame edge, a different material. With pane values, water wicks along the top instead of running off the corner |
 | evaporation | 0.03 per s per exposed particle | Faster than real drying in rain, chosen for the frame budget |
 

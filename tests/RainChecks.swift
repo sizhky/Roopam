@@ -165,7 +165,7 @@ struct RainChecks {
         run(w, frames: 1)
         let before = w.snapshot()
         let small = centroid(before.filter { $0.x.x < 300 }), large = centroid(before.filter { $0.x.x >= 300 })
-        run(w, frames: 90)
+        run(w, frames: 180)
         let after = w.snapshot()
         let pinned = centroid(after.filter { $0.x.x < 300 })
         precondition(hypot(pinned.x - small.x, pinned.y - small.y) < 1, "the smallest raindrop is pinned by the glass")
