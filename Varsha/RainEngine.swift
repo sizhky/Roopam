@@ -70,7 +70,7 @@ final class RainEngine {
             if drops[i].impacted || (drops[i].window.map { !windowIDs.contains($0) } ?? false) {
                 drops[i] = spawn(params: p, anywhere: false, windowIDs: windowIDs)
             }
-            let speed = 520 + 900 * drops[i].near
+            let speed = Self.speed(of: drops[i])
             let from = CGPoint(x: drops[i].x, y: drops[i].y)
             drops[i].y += speed * dt
             drops[i].x += sway * (0.4 + drops[i].near) * dt
@@ -101,8 +101,23 @@ final class RainEngine {
         inward.removeAll { $0.age >= $0.life }
     }
 
-    static func length(of drop: RainDrop, params p: RainParams) -> CGFloat {
-        (8 + 34 * drop.near) * (0.6 + 0.6 * p.intensity) * drop.seed
+    /// docs/varsha/physics.md: Rain streaks. Time the eye integrates one frame of falling rain over.
+    static let exposure: CGFloat = 1.0 / 40
+
+    static func speed(of drop: RainDrop) -> CGFloat { 520 + 900 * drop.near }
+
+    /// Distance the drop covers during one exposure.
+    static func length(of drop: RainDrop) -> CGFloat { speed(of: drop) * exposure }
+
+    /// Apparent radius in points. Nearer drops look larger, and heavier rain has larger drops.
+    static func radius(of drop: RainDrop, params p: RainParams) -> CGFloat {
+        (0.3 + 1.7 * drop.near * drop.near) * (0.8 + 0.4 * p.intensity) * drop.seed
+    }
+
+    /// Share of the exposure a drop of `radius` moving at `speed` covers one point of its streak.
+    /// >>> coverTime(radius: 1, speed: 800) == 0.1
+    static func coverTime(radius: CGFloat, speed: CGFloat) -> CGFloat {
+        min(1, 2 * radius / max(1, speed * exposure))
     }
 
     private func spawn(params p: RainParams, anywhere: Bool, windowIDs: [Int]) -> RainDrop {
@@ -121,7 +136,7 @@ final class RainEngine {
     /// Starts an aimed drop on the straight path that meets its window's outline. Rain meets the top in
     /// proportion to its width and the windward side in proportion to height times the slant of the fall.
     private func aim(_ d: inout RainDrop, at r: CGRect, params p: RainParams) {
-        let slope = Self.windSpeed(p) * (0.4 + d.near) / (520 + 900 * d.near)
+        let slope = Self.windSpeed(p) * (0.4 + d.near) / Self.speed(of: d)
         let corner = min(Glass.cornerRadius, r.width / 2, r.height / 2), side = (r.height - 2 * corner) * abs(slope)
         let target: CGPoint
         if CGFloat.random(in: 0...(r.width + side)) < side {

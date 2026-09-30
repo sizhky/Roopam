@@ -1,5 +1,6 @@
 import Foundation
 import simd
+import Metal
 
 /// Geometry checks plus headless GPU checks of behaviour that must emerge from the fluid (docs/varsha/physics.md).
 @main
@@ -17,6 +18,7 @@ struct RainChecks {
         source = try! String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8)
         let start = Date()
         geometry()
+        streaks()
         impacts()
         let physics = Date()
         edges()
@@ -53,6 +55,16 @@ struct RainChecks {
             }
         }
         return Set(ps.indices.map(root)).count
+    }
+
+    /// docs/varsha/physics.md: Rain streaks. A streak is one exposure of motion blur.
+    static func streaks() {
+        close(RainEngine.coverTime(radius: 1, speed: 800), 0.1, "a drop covers a streak point for its diameter over the exposure length")
+        let near = RainDrop(x: 0, y: 0, near: 1, front: true, seed: 1), far = RainDrop(x: 0, y: 0, near: 0, front: false, seed: 1)
+        close(RainEngine.length(of: near), RainEngine.speed(of: near) * RainEngine.exposure, "streak length is speed times exposure")
+        precondition(RainEngine.length(of: near) > RainEngine.length(of: far), "nearer rain moves faster on screen and streaks longer")
+        let device = MTLCreateSystemDefaultDevice()!
+        _ = RainStreaks(device: device, source: try! String(contentsOfFile: CommandLine.arguments[2], encoding: .utf8))
     }
 
     static func geometry() {

@@ -46,7 +46,6 @@ Water of a window is hidden behind every window in front of it, per pixel, in `s
   Each lands on the frontmost glass under its impact point: an app window's face, otherwise the screen glass.
 - Downpour draws 1540 streaks per megapixel (medium intensity draws about 600).
 
-Streaks have a dark offset under-stroke so they stay visible on light backgrounds.
 
 ## Forces and constraints
 
@@ -125,6 +124,18 @@ Refraction is off by default. When it is on, a ScreenCaptureKit stream copies ea
 For each water pixel, a vertical view ray refracts at the surface normal with Snell's law (`refract`, index 1.33). The ray travels through the water depth (`Fluid.lensDepth` × height) and reads the captured pixel it reaches. The content lies on the glass directly under the drop, so the image is magnified and not inverted.
 
 Apple's Liquid Glass (`glassEffect`, `NSGlassEffectView`) was rejected. Its lens profile is fixed and applies per view shape. It cannot follow a particle height field.
+
+## Rain streaks
+
+A falling streak is the motion blur of one drop over one exposure (`RainEngine.exposure`, 1/40 s), after Garg and Nayar, "Photorealistic Rendering of Rain Streaks" (SIGGRAPH 2006). Its length is the drop's screen speed times the exposure. Its width is the drop's apparent diameter. Nearer drops look larger, and heavier rain has larger drops.
+
+A point on the streak sees the drop for `2r / (v T)` of the exposure (`RainEngine.coverTime`) and the background for the rest. That share is the streak's alpha. The streak is uniform along its length, as constant-velocity blur is.
+
+A drop refracts a wide cone of the scene behind it. With a backdrop, its radiance is the mean of eight backdrop samples on a ring (`RainStreaks.reach`, 90 pt), mixed with a fixed overcast sky (`RainStreaks.sky`, 45%) for the part of the cone outside the screen. Streaks therefore show clearly against dark content and faintly against bright content. Without a backdrop, the radiance is the sky alone.
+
+Streaks render on the GPU (`Rain.metal`) at the layer's backing scale. Pixel coverage is the exact box filter of the streak width, so sub-pixel drops fade instead of aliasing. Both overlay layers read the screen's backdrop.
+
+Rejected: a dark offset under-stroke for light backgrounds. Clear water casts no such outline.
 
 ## Known limits
 - Refraction reads a capture about one frame old, so drops can shimmer while content scrolls behind them.

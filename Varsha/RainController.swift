@@ -14,6 +14,7 @@ final class RainController {
 
     private let settings = Settings.shared
     private let water = WindowWater(source: WindowWater.bundledSource())
+    private lazy var streaks = RainStreaks(device: water.device, source: RainStreaks.bundledSource())
     private var overlays: [ScreenOverlay] = []
     private var timer: Timer?
     private var windows: [WindowFrame] = []
@@ -38,7 +39,7 @@ final class RainController {
         applyBackdrops()
     }
 
-    /// One capture per screen while refraction is on; each front view reads its own screen's capture.
+    /// One capture per screen while refraction is on; both views of a screen read its capture.
     private func applyBackdrops() {
         let wanted = settings.raining && settings.windowWater && settings.refraction
         let fps = Int((1 / frameInterval).rounded())
@@ -48,7 +49,11 @@ final class RainController {
             let own = Set(overlays.flatMap { [$0.back.windowNumber, $0.front.windowNumber] })
             backdrops.forEach { $0?.start(fps: fps, own: own) }
         }
-        for (i, o) in overlays.enumerated() { o.frontView.backdrop = i < backdrops.count ? backdrops[i] : nil }
+        for (i, o) in overlays.enumerated() {
+            let b = i < backdrops.count ? backdrops[i] : nil
+            o.backView.backdrop = b
+            o.frontView.backdrop = b
+        }
     }
 
     private var frameInterval: TimeInterval {
@@ -96,7 +101,7 @@ final class RainController {
                                                 to: CGPoint(x: b.x + origin.x, y: b.y + origin.y), on: id,
                                                 volume: 2 + 6 * drop.near,
                                                 velocity: CGVector(dx: RainEngine.windSpeed(params) * (0.4 + drop.near),
-                                                                   dy: 520 + 900 * drop.near)) else { return nil }
+                                                                   dy: RainEngine.speed(of: drop))) else { return nil }
                 return CGPoint(x: hit.x - origin.x, y: hit.y - origin.y)
             }, strikes: settings.windowWater ? { d in
                 water.catchInward(at: CGPoint(x: d.target.x + origin.x, y: d.target.y + origin.y), radius: d.radius, velocity: d.drift)
@@ -122,8 +127,8 @@ final class RainController {
             let origin = CGPoint(x: f.minX, y: primaryHeight - f.maxY)
             let engine = RainEngine(size: f.size)
             let bounds = NSRect(origin: .zero, size: f.size)
-            let bv = RainView(frame: bounds, layer: .back, screenOrigin: origin, engine: engine, water: water)
-            let fv = RainView(frame: bounds, layer: .front, screenOrigin: origin, engine: engine, water: water)
+            let bv = RainView(frame: bounds, layer: .back, screenOrigin: origin, engine: engine, water: water, streaks: streaks)
+            let fv = RainView(frame: bounds, layer: .front, screenOrigin: origin, engine: engine, water: water, streaks: streaks)
             let back = Self.overlay(screen: screen, view: bv,
                                     level: NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1))
             let front = Self.overlay(screen: screen, view: fv, level: .floating)
