@@ -57,7 +57,9 @@ final class RainView: NSView {
     /// Rain and window water both render on the GPU at Retina scale and read the same backdrop.
     func refresh() {
         streaks.render(visibleStreaks(), into: rain, size: bounds.size, backdrop: backdrop?.texture)
-        if layer_ == .front { water.render(into: waterLayer, origin: screenOrigin, size: bounds.size, backdrop: backdrop?.texture) }
+        guard layer_ == .front else { return }
+        let frames = backdrop?.frames
+        water.render(into: waterLayer, origin: screenOrigin, size: bounds.size, backdrop: frames?.now, previous: frames?.before)
     }
 
     /// docs/varsha/physics.md: Rain streaks. Each streak is the path one drop covers during the exposure.

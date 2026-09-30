@@ -116,10 +116,12 @@ struct FluidView {
     var threshold: Float
 }
 
-/// Mirrors `Lens` in Fluid.metal. Depth is in drawable pixels; a zero depth turns refraction off.
+/// Mirrors `Lens` in Fluid.metal. Depth and shift are in drawable pixels; a zero depth turns refraction off.
 struct FluidLens {
     var depth: Float
     var eta: Float
+    var shift: Float
+    var change: Float
 }
 
 /// docs/varsha/physics.md: Constants. Units are points, seconds, and particles of unit mass.
@@ -154,6 +156,8 @@ enum Fluid {
     static let threshold: Float = 0.8
     static let lensDepth: Float = 6       // points of water above the glass at a bead's crown
     static let waterIndex: Float = 1.33
+    static let liveShift: Float = 2       // points of refraction offset at which the captured image fully replaces the live one
+    static let staleChange: Float = 0.12  // colour change between captures at which the captured image fully gives way
 
     static func poly6(_ r2: Float) -> Float {
         let d = h * h - r2
@@ -519,15 +523,17 @@ final class WindowWater {
 
     /// Draws the water visible on one screen into its layer, inside the pending step's command buffer.
     /// With a backdrop, the water refracts it; without one, the water is shaded only.
-    func render(into layer: CAMetalLayer, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil) {
+    /// `previous` is the capture before `backdrop`; where they differ, the capture is stale and the live screen shows.
+    func render(into layer: CAMetalLayer, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil, previous: MTLTexture? = nil) {
         guard let drawable = layer.nextDrawable() else { return }
-        let cb = encode(into: drawable.texture, key: ObjectIdentifier(layer), origin: origin, size: size, backdrop: backdrop)
+        let cb = encode(into: drawable.texture, key: ObjectIdentifier(layer), origin: origin, size: size,
+                        backdrop: backdrop, previous: previous)
         cb?.present(drawable)
     }
 
     /// Offscreen render of the current state, for checks. The texture must be .bgra8Unorm and render-target capable.
-    func render(into texture: MTLTexture, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil) {
-        _ = encode(into: texture, key: ObjectIdentifier(texture), origin: origin, size: size, backdrop: backdrop)
+    func render(into texture: MTLTexture, origin: CGPoint, size: CGSize, backdrop: MTLTexture? = nil, previous: MTLTexture? = nil) {
+        _ = encode(into: texture, key: ObjectIdentifier(texture), origin: origin, size: size, backdrop: backdrop, previous: previous)
         wait()
     }
 
@@ -537,7 +543,7 @@ final class WindowWater {
     }()
 
     private func encode(into target: MTLTexture, key: ObjectIdentifier, origin: CGPoint, size: CGSize,
-                        backdrop: MTLTexture?) -> MTLCommandBuffer? {
+                        backdrop: MTLTexture?, previous: MTLTexture?) -> MTLCommandBuffer? {
         guard let cb = pending ?? queue.makeCommandBuffer() else { return nil }
         if pending == nil { pending = cb }
         if fields[key]?.width != target.width || fields[key]?.height != target.height {
@@ -578,9 +584,11 @@ final class WindowWater {
         if let e = cb.makeRenderCommandEncoder(descriptor: second) {
             e.setRenderPipelineState(compositing)
             let scale = Float(target.width) / Float(max(1, size.width))
-            var lens = FluidLens(depth: backdrop == nil ? 0 : Fluid.lensDepth * scale, eta: 1 / Fluid.waterIndex)
+            var lens = FluidLens(depth: backdrop == nil ? 0 : Fluid.lensDepth * scale, eta: 1 / Fluid.waterIndex,
+                                 shift: Fluid.liveShift * scale, change: Fluid.staleChange)
             e.setFragmentTexture(field, index: 0)
             e.setFragmentTexture(backdrop ?? blank, index: 1)
+            e.setFragmentTexture(previous ?? backdrop ?? blank, index: 2)
             e.setFragmentBytes(&view, length: MemoryLayout<FluidView>.stride, index: 0)
             e.setFragmentBytes(&lens, length: MemoryLayout<FluidLens>.stride, index: 1)
             e.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

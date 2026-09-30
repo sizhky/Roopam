@@ -37,7 +37,7 @@ struct Params {
     uint seed;
 };
 struct View { float2 origin; float2 size; float radius; float corner; uint windowCount; float threshold; };
-struct Lens { float depth; float eta; };
+struct Lens { float depth; float eta; float shift; float change; };
 
 constant int DEAD = 0;
 constant int SIDE = 1;
@@ -372,9 +372,11 @@ vertex FullOut fullscreen(uint vid [[vertex_id]]) {
 /// Treats the saturated field as the height of a clear lens over the background: the steep rim refracts the
 /// dark surroundings, the top-left slope reflects a highlight, and light focused through the drop brightens the far side.
 /// With a backdrop, a view ray refracts at the water surface (Snell) and reads the pixel it reaches on the glass.
+/// The capture is one frame older than the screen under the overlay. Where the ray lands near its own pixel, or where
+/// the last two captures differ, the drop lets the live pixel through and only darkens it, so stale colour never shows.
 fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[texture(0)]],
                           texture2d<float> backdrop [[texture(1)]], constant View &V [[buffer(0)]],
-                          constant Lens &lens [[buffer(1)]]) {
+                          constant Lens &lens [[buffer(1)]], texture2d<float> previous [[texture(2)]]) {
     int2 c = int2(in.position.xy);
     int2 last = int2(field.get_width() - 1, field.get_height() - 1);
     auto height = [&](int2 o) {
@@ -401,9 +403,16 @@ fragment float4 composite(FullOut in [[stage_in]], texture2d<float> field [[text
         constexpr sampler s(filter::linear, address::clamp_to_edge);
         float3 t = refract(float3(0, 0, -1), n, lens.eta);
         float2 hit = in.position.xy + t.xy / max(-t.z, 0.2) * z * lens.depth;
-        float3 behind = backdrop.sample(s, hit / float2(field.get_width(), field.get_height())).rgb;
+        float2 pixels = float2(field.get_width(), field.get_height());
+        float2 at = hit / pixels, here = in.position.xy / pixels;
+        float3 behind = backdrop.sample(s, at).rgb;
+        float3 change = max(abs(behind - previous.sample(s, at).rgb), abs(backdrop.sample(s, here).rgb - previous.sample(s, here).rgb));
+        float fresh = 1.0 - smoothstep(lens.change * 0.25, lens.change, max(change.r, max(change.g, change.b)));
+        float image = smoothstep(lens.shift * 0.25, lens.shift, length(hit - in.position.xy)) * fresh;
+        float keep = 0.98 * (1.0 - 0.2 * edge);
         float3 water = behind * float3(0.97, 0.985, 1.0) * (1.0 - 0.2 * edge);
-        return float4(cover * mix(water, float3(1.0), spec), cover);
+        float alpha = 1.0 - (1.0 - image) * keep * (1.0 - spec);
+        return cover * float4((1.0 - spec) * image * water + spec, alpha);
     }
     float dark = cover * 0.32 * edge;
     float body = cover * 0.03;

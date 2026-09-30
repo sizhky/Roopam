@@ -13,6 +13,7 @@ final class Backdrop: NSObject, SCStreamOutput, SCStreamDelegate {
     private let lock = NSLock()
     private var stream: SCStream?
     private var frame: CVMetalTexture?
+    private var previous: CVMetalTexture?
     private var stopped = false
     private(set) var fps = 0
 
@@ -30,12 +31,19 @@ final class Backdrop: NSObject, SCStreamOutput, SCStreamDelegate {
         return frame.flatMap(CVMetalTextureGetTexture)
     }
 
+    /// The newest frame and the one before it, so water can tell where the screen is changing.
+    var frames: (now: MTLTexture, before: MTLTexture)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let now = frame.flatMap(CVMetalTextureGetTexture) else { return nil }
+        return (now, previous.flatMap(CVMetalTextureGetTexture) ?? now)
+    }
+
     /// `own` holds Varsha's overlay window numbers. They are excluded by ID as well as by app,
     /// because a captured overlay would refract its own water on the next frame.
     private static var asked = false
     /// Last capture state, shown in the menu so a missing refraction has a visible cause.
     static private(set) var status = "Not started"
-    private var frames = 0
+    private var count = 0
     private static func report(_ s: String) { DispatchQueue.main.async { status = s } }
 
     func start(fps: Int, own: Set<Int>) {
@@ -66,7 +74,7 @@ final class Backdrop: NSObject, SCStreamOutput, SCStreamDelegate {
                 config.pixelFormat = kCVPixelFormatType_32BGRA
                 config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
                 config.showsCursor = false
-                config.queueDepth = 3
+                config.queueDepth = 4
                 let stream = SCStream(filter: filter, configuration: config, delegate: self)
                 try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
                 try await stream.startCapture()
@@ -88,7 +96,7 @@ final class Backdrop: NSObject, SCStreamOutput, SCStreamDelegate {
     func stop() {
         lock.lock()
         stopped = true
-        let s = stream; stream = nil; frame = nil
+        let s = stream; stream = nil; frame = nil; previous = nil
         lock.unlock()
         s?.stopCapture { _ in }
     }
@@ -102,12 +110,12 @@ final class Backdrop: NSObject, SCStreamOutput, SCStreamDelegate {
         CVMetalTextureCacheCreateTextureFromImage(nil, cache, pixels, nil, .bgra8Unorm,
                                                   CVPixelBufferGetWidth(pixels), CVPixelBufferGetHeight(pixels), 0, &texture)
         guard let texture else { return Self.report("Frame could not become a Metal texture.") }
-        lock.lock(); frame = texture; frames += 1; let n = frames; lock.unlock()
+        lock.lock(); previous = frame; frame = texture; count += 1; let n = count; lock.unlock()
         if n == 1 || n % 300 == 0 { Self.report("Refracting. \(n) frames received.") }
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         Self.report("Capture stopped: \(error.localizedDescription)")
-        lock.lock(); self.stream = nil; frame = nil; lock.unlock()
+        lock.lock(); self.stream = nil; frame = nil; previous = nil; lock.unlock()
     }
 }
