@@ -488,11 +488,13 @@ final class WindowWater {
 
     private func parameters(dt: Float, wind p: RainParams) -> FluidParams {
         seed = seed &* 1_664_525 &+ 1_013_904_223
+        let surfaceDrag = p.surfaceDrag.isFinite ? Float(min(4, max(0.25, p.surfaceDrag))) : 1
         return FluidParams(gravity: SIMD2(0, Fluid.gravity), wind: SIMD2(Float(RainEngine.windSpeed(p)), 0), dt: dt,
                            h: Fluid.h, rho0: Fluid.rho0, radius: Fluid.radius,
                            adhesion: Fluid.adhesion, viscosity: Fluid.viscosity, airDrag: Fluid.airDrag,
                            contactRange: Fluid.contactRange,
-                           pin: Fluid.pin, edgePin: Fluid.edgePin, edgeDrag: Fluid.edgeDrag, substrateDrag: Fluid.substrateDrag, evaporation: evaporation,
+                           pin: Fluid.pin, edgePin: Fluid.edgePin,
+                           edgeDrag: Fluid.edgeDrag * surfaceDrag, substrateDrag: Fluid.substrateDrag * surfaceDrag, evaporation: evaporation,
                            corner: Float(Glass.cornerRadius), scorrK: Fluid.scorrK,
                            scorrW: Fluid.poly6(pow(0.2 * Fluid.h, 2)), bond: Fluid.bond, bondRest: Fluid.bondRest,
                            sleepSpeed: Fluid.sleepSpeed, sleepTime: Fluid.sleepTime,

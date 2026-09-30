@@ -85,7 +85,7 @@ final class RainController {
         let now = CACurrentMediaTime()
         let dt = CGFloat(min(0.05, now - last)); last = now
         let params = RainParams(intensity: settings.intensity, wind: settings.wind,
-                                depth: settings.depth, densityScale: densityScale)
+                                depth: settings.depth, densityScale: densityScale, surfaceDrag: settings.surfaceDrag)
         if settings.windowWater { windows = WindowTracker.frames() }
         water.screens = settings.windowWater ? overlays.map { CGRect(origin: $0.backView.screenOrigin, size: $0.engine.size) } : []
         water.step(dt: dt, windows: settings.windowWater ? windows : [], params: params)

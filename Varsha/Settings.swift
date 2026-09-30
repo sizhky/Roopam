@@ -19,6 +19,7 @@ final class Settings: ObservableObject {
     @Published var quality: Quality { didSet { store.set(quality.rawValue, forKey: "quality") } }
     @Published var frontParticles: Bool { didSet { store.set(frontParticles, forKey: "frontParticles") } }
     @Published var windowWater: Bool { didSet { store.set(windowWater, forKey: "windowWater") } }
+    @Published var surfaceDrag: Double { didSet { store.set(surfaceDrag, forKey: "surfaceDrag") } }
     @Published var refraction: Bool { didSet { store.set(refraction, forKey: "refraction") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -37,6 +38,7 @@ final class Settings: ObservableObject {
         quality = Quality(rawValue: d.string(forKey: "quality") ?? "") ?? .automatic
         frontParticles = d.object(forKey: "frontParticles") as? Bool ?? true
         windowWater = d.object(forKey: "windowWater") as? Bool ?? true
+        surfaceDrag = d.object(forKey: "surfaceDrag") as? Double ?? 1
         refraction = d.object(forKey: "refraction") as? Bool ?? false
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

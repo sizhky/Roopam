@@ -71,6 +71,12 @@ Defects snag the back of a sliding drop, which leaves droplets behind it as a tr
 
 ## Constants
 
+The Surface drag slider scales pane and edge drag together from 0.25 to 4, with a default of 1.
+Higher values slow sliding water; the material ratio stays unchanged.
+The saved setting passes through `RainParams.surfaceDrag` into `WindowWater.parameters`, which bounds the multiplier before sending it to Metal.
+Air drag and contact-line pinning remain independent, so this control does not release pinned drops.
+Manual checks: compare moving drops at both endpoints, restart to check persistence, and disable Water on windows to check availability.
+
 Units are points and seconds. Particles have unit mass.
 
 | Constant | Value | Reason |

@@ -7,6 +7,7 @@ struct RainParams {
     var wind: CGFloat = 0          // -1 left ... 1 right
     var depth: CGFloat = 0.5       // 0 flat ... 1 deep
     var densityScale: CGFloat = 1  // quality scaling
+    var surfaceDrag: CGFloat = 1
 }
 
 struct RainDrop {
